@@ -6,15 +6,20 @@ const port = process.env.PORT || 3000;
 const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.png':'image/png', '.ico':'image/x-icon' };
 
 // ---------------------------------------------------------------------------
-// /api/ticker — quotes + Japanese headlines for the scrolling banner.
-// The browser can't call these sources directly (no CORS), so we relay them
-// here and cache for a minute. Every source is best-effort: whatever answers
-// gets shown, the rest is simply left out.
+// /api/ticker — what the bottom banner scrolls.
+//
+// Deliberately only two kinds of source, both of which are meant to be polled:
+//   * frankfurter.app — a public FX API (ECB reference rates)
+//   * NHK / Yahoo news RSS — feeds published for exactly this purpose
+// No index scraping. Screen-scraping Yahoo Finance worked in testing but gets
+// rate-limited and risks the host being blocked, which is not worth a banner.
+// Everything is cached hard and fetched at most a few times an hour.
 // ---------------------------------------------------------------------------
-const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
-let cache = { at: 0, body: null };
-let lastGood = {};                       // label -> last quote that came back
-const CACHE_MS = 60 * 1000;
+const UA = 'Mozilla/5.0 (compatible; NVS-viewer/1.0; +https://nvs-viewer-production.up.railway.app)';
+const FX_TTL   = 30 * 60 * 1000;      // ECB publishes once a day; half an hour is plenty
+const NEWS_TTL =  5 * 60 * 1000;
+let fxCache = { at: 0, data: null };
+let newsCache = { at: 0, data: null };
 
 function get(url, ms) {
   return new Promise(resolve => {
@@ -32,102 +37,42 @@ function get(url, ms) {
       res.on('end', () => finish(d));
     });
     req.on('error', () => finish(null));
-    req.setTimeout(ms || 6000, () => { req.destroy(); finish(null); });
+    req.setTimeout(ms || 7000, () => { req.destroy(); finish(null); });
   });
 }
 
-function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+function ymd(d) {
+  return d.getUTCFullYear() + '-' +
+         String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getUTCDate()).padStart(2, '0');
+}
 
-// Yahoo Finance chart endpoint: last price + previous close in one call
-async function yahoo(symbol, label) {
-  const raw = await get('https://query1.finance.yahoo.com/v8/finance/chart/' +
-                        encodeURIComponent(symbol) + '?range=5d&interval=1d', 6000);
-  if (!raw || raw[0] !== '{') return null;
+// USD/JPY plus the move since the previous published rate
+async function fx() {
+  if (fxCache.data && Date.now() - fxCache.at < FX_TTL) return fxCache.data;
+  const from = ymd(new Date(Date.now() - 8 * 864e5));
+  const raw = await get('https://api.frankfurter.app/' + from + '..?from=USD&to=JPY', 7000);
+  let out = null;
   try {
-    const m = JSON.parse(raw).chart.result[0].meta;
-    const last = num(m.regularMarketPrice), prev = num(m.chartPreviousClose || m.previousClose);
-    if (last === null) return null;
-    return { sym: label, last: last, chg: prev === null ? null : last - prev,
-             pct: prev ? ((last - prev) / prev) * 100 : null };
-  } catch (e) { return null; }
-}
-
-// Yahoo Finance Japan's own pages. Railway can reach these (it cannot reach
-// query1.finance.yahoo.com), and they carry the change and % already worked out.
-const jpnum = s => parseFloat(String(s).replace(/,/g, ''));
-
-// index pages: "price":"68,308.59","savePrice":"…","changePrice":"784.53","changePriceRate":"1.16"
-async function yjIndex(code, label) {
-  const h = await get('https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code), 7000);
-  if (!h) return null;
-  const m = /"price":"([\d,.\-]+)","savePrice":"[^"]*","changePrice":"(-?[\d,.]+)","changePriceRate":"(-?[\d,.]+)"/.exec(h);
-  if (!m) return null;
-  const last = jpnum(m[1]);
-  if (!isFinite(last)) return null;
-  return { sym: label, last: last, chg: jpnum(m[2]), pct: jpnum(m[3]) };
-}
-
-// fx pages keep the same numbers inside an escaped JSON blob
-async function yjFx(code, label) {
-  const h = await get('https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code), 7000);
-  if (!h) return null;
-  const bid = /\\"bid\\":\{\\"value\\":\\"([\d,.]+)\\"\}/.exec(h);
-  if (!bid) return null;
-  const chg = /\\"change\\":\{\\"value\\":\\"(-?[\d,.]+)\\"\}/.exec(h);
-  const last = jpnum(bid[1]);
-  if (!isFinite(last)) return null;
-  const c = chg ? jpnum(chg[1]) : null;
-  return { sym: label, last: last, chg: c,
-           pct: (c !== null && last - c) ? (c / (last - c)) * 100 : null };
-}
-
-// Stooq daily CSV: Symbol,Date,Time,Open,High,Low,Close,Volume
-async function stooq(symbol, label) {
-  const raw = await get('https://stooq.com/q/l/?s=' + encodeURIComponent(symbol) +
-                        '&f=sd2t2ohlcv&h&e=csv', 6000);
-  if (!raw || raw.indexOf('<') === 0) return null;
-  const line = raw.trim().split('\n')[1];
-  if (!line) return null;
-  const c = line.split(',');
-  const close = parseFloat(c[6]), open = parseFloat(c[3]);
-  if (!isFinite(close)) return null;
-  return { sym: label, last: close, chg: isFinite(open) ? close - open : null,
-           pct: isFinite(open) && open ? ((close - open) / open) * 100 : null };
-}
-
-// Each line tries Yahoo Japan first, then the US API, then stooq — whichever
-// the host can actually reach. Anything that answers gets shown.
-async function quotes() {
-  const want = [
-    { label: 'USD/JPY', jf: 'USDJPY=FX', y: 'JPY=X',    s: 'usdjpy' },
-    { label: 'NKY',     ji: '998407.O',  y: '^N225',    s: '^nkx' },
-    { label: 'TOPIX',   ji: '998405.T',  y: '1306.T',   s: '^tpx' },
-    { label: 'EUR/JPY', jf: 'EURJPY=FX', y: 'EURJPY=X', s: 'eurjpy' },
-    { label: 'S&P500',  ji: '^GSPC',     y: '^GSPC',    s: '^spx' },
-    { label: 'US10Y',                    y: '^TNX',     s: null }
-  ];
-  const out = await Promise.all(want.map(async w => {
-    if (w.ji) { const r = await yjIndex(w.ji, w.label); if (r) return r; }
-    if (w.jf) { const r = await yjFx(w.jf, w.label);    if (r) return r; }
-    return (await yahoo(w.y, w.label)) || (w.s ? await stooq(w.s, w.label) : null) || null;
-  }));
-  // Providers block and unblock at random, so hold on to the last good print for
-  // each line; a blip then shows a slightly stale number instead of nothing.
-  out.forEach((q, i) => { if (q) lastGood[want[i].label] = { q: q, at: Date.now() }; });
-  const list = out.map((q, i) => {
-    if (q) return q;
-    const keep = lastGood[want[i].label];
-    return (keep && Date.now() - keep.at < 6 * 3600 * 1000) ? keep.q : null;
-  }).filter(Boolean);
-  // last resort for the FX rate so the banner is never completely empty
-  if (!list.some(q => q.sym === 'USD/JPY')) {
-    const raw = await get('https://open.er-api.com/v6/latest/USD', 5000);
+    const j = JSON.parse(raw);
+    const days = Object.keys(j.rates || {}).sort();
+    if (days.length) {
+      const last = j.rates[days[days.length - 1]].JPY;
+      const prev = days.length > 1 ? j.rates[days[days.length - 2]].JPY : null;
+      out = [{ sym: 'USD/JPY', last: last, asof: days[days.length - 1],
+               chg: prev == null ? null : last - prev,
+               pct: prev ? ((last - prev) / prev) * 100 : null }];
+    }
+  } catch (e) {}
+  if (!out) {                                   // one plain fallback, still a real API
+    const raw2 = await get('https://open.er-api.com/v6/latest/USD', 6000);
     try {
-      const j = JSON.parse(raw);
-      if (j && j.rates && j.rates.JPY) list.unshift({ sym: 'USD/JPY', last: j.rates.JPY, chg: null, pct: null });
+      const j = JSON.parse(raw2);
+      if (j && j.rates && j.rates.JPY) out = [{ sym: 'USD/JPY', last: j.rates.JPY, chg: null, pct: null }];
     } catch (e) {}
   }
-  return list;
+  if (out) fxCache = { at: Date.now(), data: out };
+  return out || (fxCache.data || []);
 }
 
 function unent(s) {
@@ -156,39 +101,33 @@ function parseRss(xml, src, max) {
 }
 
 async function news() {
+  if (newsCache.data && Date.now() - newsCache.at < NEWS_TTL) return newsCache.data;
   const [nhk, yj] = await Promise.all([
-    get('https://www.nhk.or.jp/rss/news/cat0.xml', 6000),
-    get('https://news.yahoo.co.jp/rss/topics/top-picks.xml', 6000)
+    get('https://www.nhk.or.jp/rss/news/cat0.xml', 7000),
+    get('https://news.yahoo.co.jp/rss/topics/top-picks.xml', 7000)
   ]);
-  const a = parseRss(nhk, 'NHK', 6);
+  const a = parseRss(nhk, 'NHK', 8);
   const b = parseRss(yj, 'Yahoo', 8);
-  const mixed = [];                       // interleave so one source can't dominate
+  const mixed = [];                              // interleave so neither dominates
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
     if (a[i]) mixed.push(a[i]);
     if (b[i]) mixed.push(b[i]);
   }
-  return mixed.slice(0, 12);
-}
-
-async function ticker() {
-  const [q, n] = await Promise.all([quotes(), news()]);
-  return { quotes: q, news: n, at: Date.now() };
+  const out = mixed.slice(0, 14);
+  if (out.length) newsCache = { at: Date.now(), data: out };
+  return out.length ? out : (newsCache.data || []);
 }
 
 const server = http.createServer((req, res) => {
   const url = (req.url || '/').split('?')[0];
 
   if (url === '/api/ticker') {
-    const send = body => {
+    Promise.all([fx(), news()]).then(([q, n]) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
-      res.end(body);
-    };
-    if (cache.body && Date.now() - cache.at < CACHE_MS) return send(cache.body);
-    ticker().then(data => {
-      cache = { at: Date.now(), body: JSON.stringify(data) };
-      send(cache.body);
+      res.end(JSON.stringify({ quotes: q, news: n, at: Date.now() }));
     }).catch(() => {
-      send(cache.body || JSON.stringify({ quotes: [], news: [], at: Date.now() }));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ quotes: [], news: [], at: Date.now() }));
     });
     return;
   }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-elisa -->
+<!-- build-20260813-uni -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -33,14 +33,16 @@
   *{box-sizing:border-box}
   ::selection{background:var(--ink);color:var(--lcd)}
   html,body{height:100%}
+  /* ONE grid for the whole screen: every element inherits the same dot font+size,
+     like the 200LX's 640x200 LCD — the Font menu re-zooms the entire UI at once. */
   body{margin:0;background:var(--lcd);color:var(--ink);
-       font:12px/1.35 'PixelMplus12','PixelMplus10','DotGothic16',monospace;
+       font-family:var(--sheet);font-size:var(--fs);line-height:1.3;
        letter-spacing:0;-webkit-font-smoothing:none}
   /* top bar = Lotus inverse status line */
   header{display:flex;align-items:center;gap:14px;padding:6px 14px;
          padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
          background:var(--ink);color:var(--lcd);flex-wrap:wrap}
-  header h1{font-size:12px;margin:0;font-weight:bold}
+  header h1{font-size:inherit;margin:0;font-weight:bold}
   #tickerBox{display:flex;gap:8px;align-items:center}
   #ticker{width:90px;padding:2px 8px;border:0;border-radius:0;
           background:var(--lcd);color:var(--ink);font:inherit;outline:none;text-transform:uppercase}
@@ -49,24 +51,24 @@
          font:inherit;cursor:pointer}
   button:hover{background:var(--lcd2)}
   button:disabled{background:var(--ink2);color:var(--lcd);cursor:default}
-  #status{font-size:12px;color:var(--lcd);display:flex;align-items:center;gap:8px;font:inherit}
+  #status{color:var(--lcd);display:flex;align-items:center;gap:8px;font:inherit}
   .dot{width:8px;height:8px;border-radius:0;background:var(--lcd2);flex:none}
   .dot.loading{background:var(--lcd);animation:pulse .8s steps(2,end) infinite}
   .dot.done{background:var(--lcd)} .dot.error{background:var(--lcd);animation:pulse .4s steps(2,end) infinite} .dot.notfound{background:var(--lcd2)}
   @keyframes pulse{50%{opacity:.15}}
-  #userbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--lcd2)}
+  #userbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:inherit;color:var(--lcd2)}
   /* tabs = plain text, active is inverse video */
   nav{display:flex;gap:2px;padding:4px 14px 0;flex-wrap:wrap}
   nav .tab{padding:1px 8px;border:0;border-radius:0;background:transparent;
-           color:var(--ink2);cursor:pointer;font-size:12px;user-select:none}
+           color:var(--ink2);cursor:pointer;font-size:inherit;user-select:none}
   nav .tab.active{background:var(--ink);color:var(--lcd);font-weight:400}
   nav .tab small{color:inherit;opacity:.75;font-weight:400;margin-left:6px}
   nav .tab .x{margin-left:7px;padding:0 3px;color:inherit;opacity:.6;font-weight:400}
   nav .tab .x:hover{opacity:1;background:var(--ink);color:var(--lcd)}
-  nav .restore{padding:1px 8px;border:0;color:var(--ink2);cursor:pointer;font-size:12px;
+  nav .restore{padding:1px 8px;border:0;color:var(--ink2);cursor:pointer;font-size:inherit;
                user-select:none;background:transparent;text-decoration:underline dotted}
   nav .restore:hover{color:var(--ink)}
-  #fontBox{display:flex;gap:5px;align-items:center;font-size:12px;color:var(--lcd2)}
+  #fontBox{display:flex;gap:5px;align-items:center;font-size:inherit;color:var(--lcd2)}
   #fontBox select{background:var(--ink);color:var(--lcd);border:1px solid var(--lcd2);
                   font:inherit;padding:1px 3px;border-radius:0;outline:none;cursor:pointer}
   #fontBox select:hover{border-color:var(--lcd)}
@@ -77,8 +79,8 @@
   .card::-webkit-scrollbar{width:12px;height:12px}
   .card::-webkit-scrollbar-track{background:var(--lcd2)}
   .card::-webkit-scrollbar-thumb{background:var(--ink);border:2px solid var(--lcd2)}
-  .meta{display:flex;gap:14px;align-items:baseline;padding:4px 10px 2px;color:var(--ink2);font-size:12px}
-  .meta b{color:var(--ink);font-size:12px;font-weight:bold}
+  .meta{display:flex;gap:14px;align-items:baseline;padding:4px 10px 2px;color:var(--ink2)}
+  .meta b{color:var(--ink);font-weight:bold}
   table{border-collapse:collapse;width:100%;font-family:var(--sheet);letter-spacing:0}
   th,td{padding:1px 8px;border:0;white-space:nowrap;font-size:var(--fs);line-height:1.3}
   /* column header row = inverse video like Lotus */
@@ -93,8 +95,19 @@
   td.num{color:var(--ink)}
   tr:hover td{background:var(--lcd2)}
   #empty{padding:60px;text-align:center;color:var(--ink2)}
+  /* ---- MEMO: MemoExpress-style shared notepad (persisted at nvs/memo) ---- */
+  #memoWrap{margin-top:8px;border:1px solid var(--ink)}
+  #memoBar{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--lcd);
+           padding:1px 8px}
+  #memoBar .mtitle{font-weight:bold}
+  #memoStat{margin-left:auto;color:var(--lcd2)}
+  #memo{display:block;width:100%;min-height:110px;border:0;outline:none;resize:vertical;
+        background:var(--lcd);color:var(--ink);padding:4px 8px;
+        font-family:var(--sheet);font-size:var(--fs);line-height:1.35;letter-spacing:0;
+        -webkit-font-smoothing:none}
+  #memo::placeholder{color:var(--ink2)}
   .reload{margin-left:8px;background:transparent;border:1px solid var(--ink2);color:var(--ink2);
-          padding:0 8px;font-size:13px}
+          padding:0 8px;font-size:inherit}
   .reload:hover{color:var(--lcd);background:var(--ink);border-color:var(--ink)}
   #gate{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
   .gatebox{background:var(--lcd);border:1px solid var(--ink);border-radius:0;
@@ -108,10 +121,10 @@
   @media (max-width:640px){
     header{padding:6px 10px;gap:8px 10px}
     header h1{order:1}
-    #userbox{order:2;font-size:12px;gap:8px}
+    #userbox{order:2;gap:8px}
     #tickerBox{order:3;flex:1 1 100%}
     #ticker{flex:1 1 auto;width:auto;padding:6px 8px}
-    #status{order:4;flex:1 1 100%;font-size:14px}
+    #status{order:4;flex:1 1 100%}
     nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 10px 0}
     nav .tab{flex:0 0 auto;padding:4px 8px}
     main{padding:2px 8px 12px}
@@ -159,6 +172,10 @@
 <nav id="tabs"></nav>
 <main>
   <div class="card" id="card"><div id="empty">Type a ticker above — data appears here the moment Excel answers.</div></div>
+  <section id="memoWrap">
+    <div id="memoBar"><span class="mtitle">MEMO</span><span id="memoStat"></span></div>
+    <textarea id="memo" spellcheck="false" placeholder="shared memo — saved to Firebase, everyone sees edits live"></textarea>
+  </section>
 </main>
 </div>
 
@@ -233,6 +250,8 @@ auth.onAuthStateChanged(user => {
 
   loadDbFont('JFDotElisa8', 'elisa8');          // \u6075\u68a8\u6c99 8-dot (HP200LX)
   loadDbFont('JFDotShinonome12', 'shinonome12'); // \u6771\u96f2 12-dot
+
+  initMemo(email);
 
   db.ref('nvs/data').on('value', snap => {
     data = snap.val() || {};
@@ -343,7 +362,7 @@ function applyDot(v){
 // ---- keyboard: scroll the sheet like a 1-2-3 grid; [ and ] switch companies ----
 document.addEventListener('keydown', e => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const card = $('card');
   if (!card) return;
@@ -362,6 +381,44 @@ document.addEventListener('keydown', e => {
     case ']': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i + 1) % codes.length]; render(); } break;
   }
 });
+
+// ---- MEMO: shared notepad at nvs/memo — realtime, last-write-wins like a tiny shared doc ----
+let memoTimer = null;
+let memoTyping = 0;         // ts of the last local keystroke
+let memoLastSent = null;    // last text this client pushed (to label "saved" vs remote edits)
+function initMemo(email){
+  const ta = $('memo'), stat = $('memoStat');
+  if (!ta) return;
+  const me = String(email || '').split('@')[0];
+  db.ref('nvs/memo').on('value', snap => {
+    const m = snap.val() || {};
+    const text = m.text || '';
+    if (text !== ta.value) {
+      // apply remote edits unless this user typed within the last 1.2s (their write is in flight)
+      if (document.activeElement !== ta || Date.now() - memoTyping > 1200) {
+        const s = ta.selectionStart, e2 = ta.selectionEnd;
+        ta.value = text;
+        if (document.activeElement === ta) { try { ta.setSelectionRange(s, e2); } catch (e) {} }
+      }
+    }
+    if (m.at) {
+      const when = new Date(m.at).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+      stat.textContent = (m.by === me && text === memoLastSent)
+        ? 'saved ' + when
+        : (m.by ? m.by + ' · ' + when : when);
+    }
+  });
+  ta.addEventListener('input', () => {
+    memoTyping = Date.now();
+    stat.textContent = '…';
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(() => {
+      memoLastSent = ta.value;
+      db.ref('nvs/memo').set({ text: ta.value, by: me, at: firebase.database.ServerValue.TIMESTAMP })
+        .catch(e => { stat.textContent = 'save failed: ' + ((e && e.message) || e); });
+    }, 500);
+  });
+}
 
 function fmt(v){
   if (typeof v === 'number') {

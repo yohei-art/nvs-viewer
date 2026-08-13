@@ -4,11 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-200lx -->
+<!-- build-20260813-elisa -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
+  /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
+     Strict half/full-width grid: ASCII=0.5em, kanji=1em -> HP200LX-style fixed pitch. */
+  @font-face{font-family:'PixelMplus10';
+    src:url('https://cdn.jsdelivr.net/gh/itouhiro/PixelMplus@master/PixelMplus10-Regular.ttf') format('truetype');
+    font-weight:normal;font-display:swap;}
+  @font-face{font-family:'PixelMplus10';
+    src:url('https://cdn.jsdelivr.net/gh/itouhiro/PixelMplus@master/PixelMplus10-Bold.ttf') format('truetype');
+    font-weight:bold;font-display:swap;}
+  @font-face{font-family:'PixelMplus12';
+    src:url('https://cdn.jsdelivr.net/gh/itouhiro/PixelMplus@master/PixelMplus12-Regular.ttf') format('truetype');
+    font-weight:normal;font-display:swap;}
+  @font-face{font-family:'PixelMplus12';
+    src:url('https://cdn.jsdelivr.net/gh/itouhiro/PixelMplus@master/PixelMplus12-Bold.ttf') format('truetype');
+    font-weight:bold;font-display:swap;}
   /* ---- HP 200LX / Lotus 1-2-3 ---- one font, one ink, one LCD ---- */
   :root{
+    --fs:12px;                                                   /* sheet dot size   */
+    --sheet:'PixelMplus12','PixelMplus10','DotGothic16',monospace; /* sheet font grid */
     --lcd:#a9b09b;   /* LCD screen      */
     --lcd2:#99a18b;  /* LCD shadow      */
     --ink:#26291f;   /* pixel ink       */
@@ -18,21 +34,22 @@
   ::selection{background:var(--ink);color:var(--lcd)}
   html,body{height:100%}
   body{margin:0;background:var(--lcd);color:var(--ink);
-       font:16px/1.4 'DotGothic16',monospace}
+       font:12px/1.35 'PixelMplus12','PixelMplus10','DotGothic16',monospace;
+       letter-spacing:0;-webkit-font-smoothing:none}
   /* top bar = Lotus inverse status line */
   header{display:flex;align-items:center;gap:14px;padding:6px 14px;
          padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
          background:var(--ink);color:var(--lcd);flex-wrap:wrap}
-  header h1{font-size:16px;margin:0;font-weight:400}
+  header h1{font-size:12px;margin:0;font-weight:bold}
   #tickerBox{display:flex;gap:8px;align-items:center}
-  #ticker{width:110px;padding:2px 8px;border:0;border-radius:0;
+  #ticker{width:90px;padding:2px 8px;border:0;border-radius:0;
           background:var(--lcd);color:var(--ink);font:inherit;outline:none;text-transform:uppercase}
   #ticker::placeholder{color:var(--ink2)}
   button{padding:2px 10px;border:0;border-radius:0;background:var(--lcd);color:var(--ink);
          font:inherit;cursor:pointer}
   button:hover{background:var(--lcd2)}
   button:disabled{background:var(--ink2);color:var(--lcd);cursor:default}
-  #status{font-size:16px;color:var(--lcd);display:flex;align-items:center;gap:8px;font:inherit}
+  #status{font-size:12px;color:var(--lcd);display:flex;align-items:center;gap:8px;font:inherit}
   .dot{width:8px;height:8px;border-radius:0;background:var(--lcd2);flex:none}
   .dot.loading{background:var(--lcd);animation:pulse .8s steps(2,end) infinite}
   .dot.done{background:var(--lcd)} .dot.error{background:var(--lcd);animation:pulse .4s steps(2,end) infinite} .dot.notfound{background:var(--lcd2)}
@@ -41,14 +58,18 @@
   /* tabs = plain text, active is inverse video */
   nav{display:flex;gap:2px;padding:4px 14px 0;flex-wrap:wrap}
   nav .tab{padding:1px 8px;border:0;border-radius:0;background:transparent;
-           color:var(--ink2);cursor:pointer;font-size:14px;user-select:none}
+           color:var(--ink2);cursor:pointer;font-size:12px;user-select:none}
   nav .tab.active{background:var(--ink);color:var(--lcd);font-weight:400}
   nav .tab small{color:inherit;opacity:.75;font-weight:400;margin-left:6px}
   nav .tab .x{margin-left:7px;padding:0 3px;color:inherit;opacity:.6;font-weight:400}
   nav .tab .x:hover{opacity:1;background:var(--ink);color:var(--lcd)}
-  nav .restore{padding:1px 8px;border:0;color:var(--ink2);cursor:pointer;font-size:14px;
+  nav .restore{padding:1px 8px;border:0;color:var(--ink2);cursor:pointer;font-size:12px;
                user-select:none;background:transparent;text-decoration:underline dotted}
   nav .restore:hover{color:var(--ink)}
+  #fontBox{display:flex;gap:5px;align-items:center;font-size:12px;color:var(--lcd2)}
+  #fontBox select{background:var(--ink);color:var(--lcd);border:1px solid var(--lcd2);
+                  font:inherit;padding:1px 3px;border-radius:0;outline:none;cursor:pointer}
+  #fontBox select:hover{border-color:var(--lcd)}
   main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
   .card{background:var(--lcd);border:1px solid var(--ink);border-radius:0;
         overflow:auto;-webkit-overflow-scrolling:touch;outline:none;
@@ -56,10 +77,10 @@
   .card::-webkit-scrollbar{width:12px;height:12px}
   .card::-webkit-scrollbar-track{background:var(--lcd2)}
   .card::-webkit-scrollbar-thumb{background:var(--ink);border:2px solid var(--lcd2)}
-  .meta{display:flex;gap:16px;align-items:baseline;padding:6px 12px 2px;color:var(--ink2);font-size:14px}
-  .meta b{color:var(--ink);font-size:16px;font-weight:400}
-  table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-family:inherit}
-  th,td{padding:2px 12px;border:0;white-space:nowrap;font-size:16px;line-height:1.5}
+  .meta{display:flex;gap:14px;align-items:baseline;padding:4px 10px 2px;color:var(--ink2);font-size:12px}
+  .meta b{color:var(--ink);font-size:12px;font-weight:bold}
+  table{border-collapse:collapse;width:100%;font-family:var(--sheet);letter-spacing:0}
+  th,td{padding:1px 8px;border:0;white-space:nowrap;font-size:var(--fs);line-height:1.3}
   /* column header row = inverse video like Lotus */
   th{position:sticky;top:0;z-index:2;background:var(--ink);color:var(--lcd);
      text-align:right;font-weight:400}
@@ -67,7 +88,7 @@
   th:first-child{text-align:left;z-index:3}
   td{text-align:right}
   td:first-child{text-align:left;color:var(--ink);z-index:1;background:var(--lcd)}
-  td.field{color:var(--ink2);font-size:13px;text-align:left}
+  td.field{color:var(--ink2);font-size:var(--fs);text-align:left;opacity:.7}
   th.fc{background:var(--ink2);color:var(--lcd)}
   td.num{color:var(--ink)}
   tr:hover td{background:var(--lcd2)}
@@ -117,6 +138,20 @@
   <div id="tickerBox">
     <input id="ticker" placeholder="enter ticker" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <button id="go">Load</button>
+  </div>
+  <div id="fontBox"><label for="dotSel">Font</label>
+    <select id="dotSel">
+      <option value="e8">8dot えりさ</option>
+      <option value="10">10dot M+</option>
+      <option value="12">12dot M+</option>
+      <option value="s12">12dot 東雲</option>
+      <option value="16">16dot</option>
+      <option value="e16">16dot えりさ×2</option>
+      <option value="20">20dot M+×2</option>
+      <option value="24">24dot M+×2</option>
+      <option value="s24">24dot 東雲×2</option>
+      <option value="32">32dot</option>
+    </select>
   </div>
   <div id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
   <div id="userbox"><span id="who"></span><button id="signout" class="reload">Sign out</button></div>
@@ -196,6 +231,9 @@ auth.onAuthStateChanged(user => {
   if (wired) return;
   wired = true;
 
+  loadDbFont('JFDotElisa8', 'elisa8');          // \u6075\u68a8\u6c99 8-dot (HP200LX)
+  loadDbFont('JFDotShinonome12', 'shinonome12'); // \u6771\u96f2 12-dot
+
   db.ref('nvs/data').on('value', snap => {
     data = snap.val() || {};
     if (pendingFocus && data[pendingFocus]) {   // the just-loaded ticker finally has data
@@ -262,10 +300,50 @@ $('go').onclick = () => request($('ticker').value);
 $('ticker').addEventListener('keydown', e => { if (e.key === 'Enter') request($('ticker').value); });
 
 
+// ---- HP200LX-style Font menu: every size is an integer multiple of its bitmap ----
+const DOTS = {
+  'e8':  ['8px',  "'JFDotElisa8','PixelMplus10','PixelMplus12',monospace"],
+  '10':  ['10px', "'PixelMplus10','PixelMplus12','DotGothic16',monospace"],
+  '12':  ['12px', "'PixelMplus12','PixelMplus10','DotGothic16',monospace"],
+  's12': ['12px', "'JFDotShinonome12','PixelMplus12','PixelMplus10',monospace"],
+  '16':  ['16px', "'DotGothic16','PixelMplus12',monospace"],
+  'e16': ['16px', "'JFDotElisa8','PixelMplus10','PixelMplus12',monospace"],
+  '20':  ['20px', "'PixelMplus10','PixelMplus12','DotGothic16',monospace"],
+  '24':  ['24px', "'PixelMplus12','PixelMplus10','DotGothic16',monospace"],
+  's24': ['24px', "'JFDotShinonome12','PixelMplus12','PixelMplus10',monospace"],
+  '32':  ['32px', "'DotGothic16','PixelMplus12',monospace"]
+};
+
+// bitmap fonts served out of the Firebase backend itself (nvs/fonts/*, uploaded once via Apps Script)
+function loadDbFont(family, key){
+  db.ref('nvs/fonts/' + key + '/b64').once('value').then(snap => {
+    const b64 = snap.val();
+    if (!b64) return;
+    const bin = atob(b64);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const f = new FontFace(family, buf.buffer);
+    return f.load().then(() => document.fonts.add(f));
+  }).catch(e => console.warn('font ' + key + ':', e && e.message));
+}
+function applyDot(v){
+  const m = DOTS[v] || DOTS['12'];
+  document.documentElement.style.setProperty('--fs', m[0]);
+  document.documentElement.style.setProperty('--sheet', m[1]);
+  try { localStorage.setItem('nvsDot', v); } catch (e) {}
+}
+(function(){
+  let v = '12';
+  try { v = localStorage.getItem('nvsDot') || '12'; } catch (e) {}
+  const sel = $('dotSel');
+  if (sel) { sel.value = v; sel.onchange = () => applyDot(sel.value); }
+  applyDot(v);
+})();
+
 // ---- keyboard: scroll the sheet like a 1-2-3 grid; [ and ] switch companies ----
 document.addEventListener('keydown', e => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const card = $('card');
   if (!card) return;

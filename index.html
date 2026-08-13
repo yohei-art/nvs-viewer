@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-075556 -->
+<!-- build-20260813-closetabs -->
 <style>
   :root{
     --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --line:#2a2f3c;
@@ -35,6 +35,11 @@
            font-size:13px;user-select:none}
   nav .tab.active{background:var(--panel2);color:var(--text);font-weight:600}
   nav .tab small{color:var(--dim);font-weight:400;margin-left:6px}
+  nav .tab .x{margin-left:8px;padding:0 5px;border-radius:4px;color:var(--dim);font-weight:400}
+  nav .tab .x:hover{color:#fff;background:var(--err)}
+  nav .restore{padding:7px 12px;border-radius:8px 8px 0 0;border:1px dashed var(--line);
+               color:var(--dim);cursor:pointer;font-size:12px;user-select:none;background:transparent}
+  nav .restore:hover{color:var(--text);border-color:var(--accent)}
   main{padding:0 20px 30px;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
   .card{background:var(--panel2);border:1px solid var(--line);border-radius:0 8px 8px 8px;
         overflow:auto;-webkit-overflow-scrolling:touch;
@@ -135,6 +140,11 @@ const db = firebase.database();
 const auth = firebase.auth();
 let data = {};        // code -> payload
 let active = null;
+// tabs the user has "closed" (hidden from the strip; data stays in Firebase)
+let hidden = new Set();
+try { hidden = new Set(JSON.parse(localStorage.getItem('nvsHidden') || '[]')); } catch (e) {}
+function saveHidden(){ try { localStorage.setItem('nvsHidden', JSON.stringify([...hidden])); } catch (e) {} }
+function unhide(code){ if (code && hidden.has(code)) { hidden.delete(code); saveHidden(); } }
 let pendingFocus = null;  // a code whose "done" arrived before its data
 let wired = false;    // data listeners attached only once, after sign-in
 
@@ -193,6 +203,7 @@ auth.onAuthStateChanged(user => {
     if (s.state === 'loading') setStatus('loading', '⏳ ' + s.code + ' — Excel is loading…');
     else if (s.state === 'done') {
       // jump the view to the ticker that just finished loading
+      unhide(s.code);                       // fresh data re-opens a closed tab
       if (s.code && data[s.code]) { active = s.code; render(); }
       else pendingFocus = s.code;   // data may arrive a beat later
       const when = new Date(s.at || Date.now()).toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -205,12 +216,24 @@ auth.onAuthStateChanged(user => {
 });
 
 function sortedCodes(){
-  return Object.keys(data).sort((a,b) => (data[b].updatedAt||0) - (data[a].updatedAt||0));
+  return Object.keys(data)
+    .filter(c => !hidden.has(c))
+    .sort((a,b) => (data[b].updatedAt||0) - (data[a].updatedAt||0));
+}
+
+function closeTab(code){
+  hidden.add(code); saveHidden();
+  if (active === code) {
+    const codes = sortedCodes();
+    active = codes.length ? codes[0] : null;
+  }
+  render();
 }
 
 function request(code){
   code = String(code||'').trim().toUpperCase();   // 429a -> 429A so lookups don't fail
   if (!code) return;
+  unhide(code);                                   // re-requesting a closed tab brings it back
   db.ref('nvs/request').set({ code: code, id: Date.now() });
   setStatus('loading', '⏳ ' + code + ' — sent to the PC…');
 }
@@ -242,9 +265,23 @@ function render(){
     const t = document.createElement('div');
     t.className = 'tab' + (c === active ? ' active' : '');
     t.innerHTML = '<b>' + c + '</b><small>' + (data[c].company || '') + '</small>';
+    const x = document.createElement('span');
+    x.className = 'x'; x.textContent = '×'; x.title = 'close tab';
+    x.onclick = ev => { ev.stopPropagation(); closeTab(c); };
+    t.appendChild(x);
     t.onclick = () => { active = c; render(); };
     $('tabs').appendChild(t);
   });
+  // hidden tabs are never lost — one click restores them all
+  const nHidden = [...hidden].filter(c => data[c]).length;
+  if (nHidden > 0) {
+    const r = document.createElement('div');
+    r.className = 'restore';
+    r.textContent = '+ ' + nHidden + ' closed — restore';
+    r.title = 'show closed tabs again';
+    r.onclick = () => { hidden.clear(); saveHidden(); if (!active) { const cs = sortedCodes(); active = cs[0] || null; } render(); };
+    $('tabs').appendChild(r);
+  }
 
   // table
   const card = $('card');

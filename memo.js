@@ -1,5 +1,5 @@
 /* NVS daily memo — per-day notes + carried-forward checklist.
-   memo-20260814c
+   memo-20260814d
    Depends on globals defined in index.html: db (firebase.database()), firebase.
    Defines window.initMemo(email) and window.nvsMemo.*
 
@@ -71,6 +71,12 @@
   var trash = null, trashTimer = null;
   var saveTimer = null, typing = 0;
   var composing = false;     // true while the IME is mid-conversion
+  // Two guards that make it impossible to overwrite a day's notes by accident:
+  //   loaded — the nvs/notes snapshot has arrived, so we know the real text
+  //   dirty  — the user has actually edited the day currently on screen
+  // Without these, focusing the box before the snapshot lands left it empty and
+  // the next save wrote that emptiness over the day. (Cost one day of notes.)
+  var loaded = false, dirty = false;
   var wrap, dayLbl, list, ta, stat, undo, ready = false;
 
   function setStat(s) { if (stat) stat.textContent = s; }
@@ -108,6 +114,7 @@
     flush();
     day = to || shiftDay(day, n);
     setText(notes[day] || '');
+    dirty = false;                           // the new day is showing what the server has
     renderAll();
   }
 
@@ -286,6 +293,7 @@
       } else keep.push(l);
     });
     if (!grabbed) return false;
+    dirty = true;                            // the text really did change
     var next = keep.join('\n');
     ta.value = next;
     var c = Math.max(0, Math.min(next.length, caret - removedBefore));
@@ -301,6 +309,7 @@
   function save() {
     clearTimeout(saveTimer);
     if (!ta) return;
+    if (!loaded || !dirty) return;          // never write a day we never really showed
     var t = ta.value, d = day;
     if ((notes[d] || '') === t) return;
     notes[d] = t;
@@ -317,10 +326,12 @@
     ta.addEventListener('compositionstart', function () { composing = true; });
     ta.addEventListener('compositionend', function () {
       composing = false;
+      dirty = true;
       saveSoon();
     });
     ta.addEventListener('input', function (e) {
       if (composing || (e && e.isComposing)) return;
+      dirty = true;
       if (capture(false)) renderTasks();
       saveSoon();
     });
@@ -361,13 +372,15 @@
         var w = new Date(rec.at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
         setStat((rec.by || '') + ' · ' + w);
       }
-      // never yank text out from under someone who is typing
-      if (document.activeElement !== ta && !composing && Date.now() - typing > 1500) {
-        setText(notes[day] || '');
-      }
+      loaded = true;
+      // Fill the box whenever the user has not edited this day — even if it has
+      // focus, because an empty focused box is exactly how notes used to be lost.
+      // Once they have edited, never yank the text out from under them.
+      if (!dirty && !composing) setText(notes[day] || '');
     });
 
     setText(notes[day] || '');
+    dirty = false;
     renderAll();
     window.addEventListener('beforeunload', flush);
   }

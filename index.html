@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NVS Dashboard</title>
+<!-- build-20260813-034848 -->
 <style>
   :root{
     --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --line:#2a2f3c;
@@ -78,7 +79,7 @@
 <header>
   <h1>NVS Dashboard</h1>
   <div id="tickerBox">
-    <input id="ticker" placeholder="7203" autocomplete="off">
+    <input id="ticker" placeholder="enter ticker" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <button id="go">Load</button>
   </div>
   <div id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
@@ -114,6 +115,7 @@ const db = firebase.database();
 const auth = firebase.auth();
 let data = {};        // code -> payload
 let active = null;
+let pendingFocus = null;  // a code whose "done" arrived before its data
 let wired = false;    // data listeners attached only once, after sign-in
 
 const $ = id => document.getElementById(id);
@@ -155,7 +157,10 @@ auth.onAuthStateChanged(user => {
 
   db.ref('nvs/data').on('value', snap => {
     data = snap.val() || {};
-    if (active === null || !data[active]) {
+    if (pendingFocus && data[pendingFocus]) {   // the just-loaded ticker finally has data
+      active = pendingFocus;
+      pendingFocus = null;
+    } else if (active === null || !data[active]) {
       const codes = sortedCodes();
       active = codes.length ? codes[0] : null;
     }
@@ -166,7 +171,13 @@ auth.onAuthStateChanged(user => {
     const s = snap.val();
     if (!s) return;
     if (s.state === 'loading') setStatus('loading', '⏳ ' + s.code + ' — Excel is loading…');
-    else if (s.state === 'done') { setStatus('done', '✓ ' + (s.msg || s.code)); }
+    else if (s.state === 'done') {
+      // jump the view to the ticker that just finished loading
+      if (s.code && data[s.code]) { active = s.code; render(); }
+      else pendingFocus = s.code;   // data may arrive a beat later
+      const when = new Date(s.at || Date.now()).toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      setStatus('done', '✅ ' + (s.msg || s.code) + ' — updated ' + when);
+    }
     else if (s.state === 'notfound') setStatus('notfound', '❓ ' + s.code + ' — not a valid company code (unknown, delisted, or not a company)');
     else if (s.state === 'timeout') setStatus('error', '⌛ ' + s.code + ' — 接続がタイムアウトされました (connection timed out) — try reloading');
     else if (s.state === 'error') setStatus('error', '✖ ' + s.code + ': ' + (s.msg || 'failed'));
@@ -178,12 +189,21 @@ function sortedCodes(){
 }
 
 function request(code){
-  code = String(code||'').trim();
+  code = String(code||'').trim().toUpperCase();   // 429a -> 429A so lookups don't fail
   if (!code) return;
   db.ref('nvs/request').set({ code: code, id: Date.now() });
   setStatus('loading', '⏳ ' + code + ' — sent to the PC…');
 }
 
+// force uppercase live as the user types (keeps the caret in place)
+$('ticker').addEventListener('input', e => {
+  const up = e.target.value.toUpperCase();
+  if (up !== e.target.value) {
+    const p = e.target.selectionStart;
+    e.target.value = up;
+    e.target.setSelectionRange(p, p);
+  }
+});
 $('go').onclick = () => request($('ticker').value);
 $('ticker').addEventListener('keydown', e => { if (e.key === 'Enter') request($('ticker').value); });
 

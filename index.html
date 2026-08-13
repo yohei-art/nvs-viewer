@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-uni -->
+<!-- build-20260813-fontmenu -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -37,7 +37,8 @@
      like the 200LX's 640x200 LCD — the Font menu re-zooms the entire UI at once. */
   body{margin:0;background:var(--lcd);color:var(--ink);
        font-family:var(--sheet);font-size:var(--fs);line-height:1.3;
-       letter-spacing:0;-webkit-font-smoothing:none}
+       letter-spacing:0;-webkit-font-smoothing:none;font-synthesis:none}
+  body.smooth{-webkit-font-smoothing:antialiased}
   /* top bar = Lotus inverse status line */
   header{display:flex;align-items:center;gap:14px;padding:6px 14px;
          padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
@@ -72,6 +73,8 @@
   #fontBox select{background:var(--ink);color:var(--lcd);border:1px solid var(--lcd2);
                   font:inherit;padding:1px 3px;border-radius:0;outline:none;cursor:pointer}
   #fontBox select:hover{border-color:var(--lcd)}
+  #fontBox .bl{display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:bold}
+  #fontBox .bl input{accent-color:var(--lcd);margin:0;cursor:pointer}
   main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
   .card{background:var(--lcd);border:1px solid var(--ink);border-radius:0;
         overflow:auto;-webkit-overflow-scrolling:touch;outline:none;
@@ -152,19 +155,25 @@
     <input id="ticker" placeholder="enter ticker" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <button id="go">Load</button>
   </div>
-  <div id="fontBox"><label for="dotSel">Font</label>
-    <select id="dotSel">
-      <option value="e8">8dot えりさ</option>
-      <option value="10">10dot M+</option>
-      <option value="12">12dot M+</option>
-      <option value="s12">12dot 東雲</option>
-      <option value="16">16dot</option>
-      <option value="e16">16dot えりさ×2</option>
-      <option value="20">20dot M+×2</option>
-      <option value="24">24dot M+×2</option>
-      <option value="s24">24dot 東雲×2</option>
-      <option value="32">32dot</option>
+  <div id="fontBox"><label for="fontSel">Font</label>
+    <select id="fontSel">
+      <option value="mp12">PixelM+ 12dot</option>
+      <option value="mp10">PixelM+ 10dot</option>
+      <option value="elisa">えりさ 8dot</option>
+      <option value="shino">東雲 12dot</option>
+      <option value="dot16">DotGothic 16</option>
+      <option value="sfmono">SF Mono</option>
+      <option value="menlo">Menlo</option>
+      <option value="monaco">Monaco</option>
+      <option value="courier">Courier New</option>
+      <option value="osaka">Osaka 等幅</option>
     </select>
+    <select id="sizeSel">
+      <option>8</option><option>10</option><option>12</option><option>14</option>
+      <option>16</option><option>18</option><option>20</option><option>24</option>
+      <option>28</option><option>32</option><option>36</option><option>48</option>
+    </select>
+    <label class="bl" for="boldChk"><input type="checkbox" id="boldChk">B</label>
   </div>
   <div id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
   <div id="userbox"><span id="who"></span><button id="signout" class="reload">Sign out</button></div>
@@ -319,18 +328,20 @@ $('go').onclick = () => request($('ticker').value);
 $('ticker').addEventListener('keydown', e => { if (e.key === 'Enter') request($('ticker').value); });
 
 
-// ---- HP200LX-style Font menu: every size is an integer multiple of its bitmap ----
-const DOTS = {
-  'e8':  ['8px',  "'JFDotElisa8','PixelMplus10','PixelMplus12',monospace"],
-  '10':  ['10px', "'PixelMplus10','PixelMplus12','DotGothic16',monospace"],
-  '12':  ['12px', "'PixelMplus12','PixelMplus10','DotGothic16',monospace"],
-  's12': ['12px', "'JFDotShinonome12','PixelMplus12','PixelMplus10',monospace"],
-  '16':  ['16px', "'DotGothic16','PixelMplus12',monospace"],
-  'e16': ['16px', "'JFDotElisa8','PixelMplus10','PixelMplus12',monospace"],
-  '20':  ['20px', "'PixelMplus10','PixelMplus12','DotGothic16',monospace"],
-  '24':  ['24px', "'PixelMplus12','PixelMplus10','DotGothic16',monospace"],
-  's24': ['24px', "'JFDotShinonome12','PixelMplus12','PixelMplus10',monospace"],
-  '32':  ['32px', "'DotGothic16','PixelMplus12',monospace"]
+// ---- HP200LX-style Font menu: family and size chosen separately ----
+// bitmap families stay aliased (crisp at integer multiples of their dot size);
+// mac/system families get antialiasing and their own JP monospace fallbacks.
+const FONTS = {
+  'mp12':    {stack:"'PixelMplus12','PixelMplus10','DotGothic16',monospace",           bitmap:true,  base:12},
+  'mp10':    {stack:"'PixelMplus10','PixelMplus12','DotGothic16',monospace",           bitmap:true,  base:10},
+  'elisa':   {stack:"'JFDotElisa8','PixelMplus10','PixelMplus12',monospace",           bitmap:true,  base:8},
+  'shino':   {stack:"'JFDotShinonome12','PixelMplus12','PixelMplus10',monospace",      bitmap:true,  base:12},
+  'dot16':   {stack:"'DotGothic16','PixelMplus12',monospace",                          bitmap:true,  base:16},
+  'sfmono':  {stack:"ui-monospace,'SF Mono','Menlo','Osaka-Mono','Hiragino Sans',monospace", bitmap:false},
+  'menlo':   {stack:"'Menlo','Osaka-Mono','Hiragino Sans',monospace",                  bitmap:false},
+  'monaco':  {stack:"'Monaco','Osaka-Mono','Hiragino Sans',monospace",                 bitmap:false},
+  'courier': {stack:"'Courier New','Osaka-Mono','Hiragino Sans',monospace",            bitmap:false},
+  'osaka':   {stack:"'Osaka-Mono','Osaka','Hiragino Sans',monospace",                  bitmap:false}
 };
 
 // bitmap fonts served out of the Firebase backend itself (nvs/fonts/*, uploaded once via Apps Script)
@@ -345,18 +356,44 @@ function loadDbFont(family, key){
     return f.load().then(() => document.fonts.add(f));
   }).catch(e => console.warn('font ' + key + ':', e && e.message));
 }
-function applyDot(v){
-  const m = DOTS[v] || DOTS['12'];
-  document.documentElement.style.setProperty('--fs', m[0]);
-  document.documentElement.style.setProperty('--sheet', m[1]);
-  try { localStorage.setItem('nvsDot', v); } catch (e) {}
+function applyFont(){
+  const f = FONTS[$('fontSel').value] || FONTS['mp12'];
+  const size = parseInt($('sizeSel').value, 10) || 12;
+  document.documentElement.style.setProperty('--sheet', f.stack);
+  document.documentElement.style.setProperty('--fs', size + 'px');
+  document.body.classList.toggle('smooth', !f.bitmap);
+  document.body.style.fontWeight = $('boldChk').checked ? 'bold' : '';
+  try {
+    localStorage.setItem('nvsFont', $('fontSel').value);
+    localStorage.setItem('nvsSize', String(size));
+    localStorage.setItem('nvsBold', $('boldChk').checked ? '1' : '');
+  } catch (e) {}
 }
 (function(){
-  let v = '12';
-  try { v = localStorage.getItem('nvsDot') || '12'; } catch (e) {}
-  const sel = $('dotSel');
-  if (sel) { sel.value = v; sel.onchange = () => applyDot(sel.value); }
-  applyDot(v);
+  let font = '', size = '', bold = '';
+  try {
+    font = localStorage.getItem('nvsFont') || '';
+    size = localStorage.getItem('nvsSize') || '';
+    bold = localStorage.getItem('nvsBold') || '';
+    // migrate from the old single dot menu
+    if (!font) {
+      const old = localStorage.getItem('nvsDot');
+      const mig = {'e8':['elisa','8'],'10':['mp10','10'],'12':['mp12','12'],'s12':['shino','12'],
+                   '16':['dot16','16'],'e16':['elisa','16'],'20':['mp10','20'],'24':['mp12','24'],
+                   's24':['shino','24'],'32':['dot16','32']};
+      if (old && mig[old]) { font = mig[old][0]; size = mig[old][1]; }
+    }
+  } catch (e) {}
+  if (!FONTS[font]) font = 'mp12';
+  // device default: dense 12 on phones, 24 (12dot x2, the 200LX bold look) on big screens
+  if (!size) size = window.innerWidth >= 1100 ? '24' : '12';
+  $('fontSel').value = font;
+  $('sizeSel').value = size;
+  $('boldChk').checked = bold === '1';
+  $('fontSel').onchange = applyFont;
+  $('sizeSel').onchange = applyFont;
+  $('boldChk').onchange = applyFont;
+  applyFont();
 })();
 
 // ---- keyboard: scroll the sheet like a 1-2-3 grid; [ and ] switch companies ----

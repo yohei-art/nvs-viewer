@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260814-ime -->
+<!-- build-20260814-mvp -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -30,6 +30,7 @@
     --ink:#26291f;   /* pixel ink       */
     --ink2:#555e49;  /* dim ink         */
     --memow:300px;   /* memo pane width */
+    --tick:24px;     /* news banner height */
   }
   *{box-sizing:border-box}
   ::selection{background:var(--ink);color:var(--lcd)}
@@ -85,7 +86,7 @@
        display:flex;align-items:stretch}
   .card{flex:1 1 auto;min-width:0;background:var(--lcd);border:1px solid var(--ink);border-radius:0;
         overflow:auto;-webkit-overflow-scrolling:touch;outline:none;
-        max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
+        max-height:calc(100vh - 128px - var(--tick));max-height:calc(100dvh - 128px - var(--tick))}
   .card::-webkit-scrollbar{width:12px;height:12px}
   .card::-webkit-scrollbar-track{background:var(--lcd2)}
   .card::-webkit-scrollbar-thumb{background:var(--ink);border:2px solid var(--lcd2)}
@@ -105,6 +106,40 @@
   td.num{color:var(--ink)}
   tr:hover td{background:var(--lcd2)}
   #empty{padding:60px;text-align:center;color:var(--ink2)}
+  /* ---- boot splash: pixel MVP over the LCD, gone in a second and a half ---- */
+  #splash{position:fixed;inset:0;z-index:9999;background:var(--lcd);
+          display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+          transition:opacity .4s steps(5,end)}
+  #splash.gone{opacity:0;pointer-events:none}
+  #splash::after{content:'';position:absolute;inset:0;pointer-events:none;
+          background:repeating-linear-gradient(to bottom,rgba(0,0,0,.11) 0 1px,transparent 1px 3px)}
+  #splashLogo{image-rendering:pixelated;image-rendering:crisp-edges;
+          width:min(62vw,432px);height:auto}
+  #splashInfo{font-family:var(--sheet);color:var(--ink);font-size:calc(var(--fs) * 1.25);
+          letter-spacing:2px;text-align:center;line-height:1.6}
+  #splashInfo .sub{color:var(--ink2);letter-spacing:4px;font-size:calc(var(--fs) * .9)}
+  #splashCur{display:inline-block;width:.6em;height:1em;vertical-align:-2px;
+          background:var(--ink);animation:blink 1s steps(2,end) infinite}
+  @keyframes blink{50%{opacity:0}}
+  #clock{color:var(--lcd);white-space:nowrap}
+  #clock b{font-weight:bold}
+  /* ---- bottom news / quote banner: one long strip, scrolling forever ---- */
+  #tick{position:fixed;left:0;right:0;bottom:0;height:var(--tick);z-index:60;
+        overflow:hidden;display:flex;align-items:center;
+        background:var(--ink);color:var(--lcd);border-top:1px solid var(--lcd2)}
+  #tick.off{display:none}
+  #tickTrack{display:inline-flex;flex:none;white-space:nowrap;will-change:transform;
+             animation:tickroll 120s linear infinite}
+  #tick:hover #tickTrack{animation-play-state:paused}
+  @keyframes tickroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  #tick .run{display:inline-flex;align-items:center;white-space:nowrap}
+  #tick a{color:var(--lcd);text-decoration:none}
+  #tick a:hover{background:var(--lcd);color:var(--ink)}
+  #tick .sep{opacity:.4;padding:0 12px}
+  #tick .q b{font-weight:bold}
+  #tick .q .up::before{content:'▲ '}
+  #tick .q .dn::before{content:'▼ '}
+  #tick .src{opacity:.55;padding-right:5px}
   /* ---- MEMO: MemoExpress-style shared notepad, split pane on the right ---- */
   #split{width:14px;flex:none;cursor:col-resize;background:var(--lcd2);touch-action:none;
          border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
@@ -115,7 +150,7 @@
   #split:hover::before,#split.on::before{border-color:var(--lcd)}
   body.dragging{cursor:col-resize;user-select:none;-webkit-user-select:none}
   #memoWrap{flex:none;width:var(--memow);min-width:140px;display:flex;flex-direction:column;
-            border:1px solid var(--ink);max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
+            border:1px solid var(--ink);max-height:calc(100vh - 128px - var(--tick));max-height:calc(100dvh - 128px - var(--tick))}
   /* the memo pane's own chrome lives in memo.js (injected <style>) */
   .reload{margin-left:8px;background:transparent;border:1px solid var(--ink2);color:var(--ink2);
           padding:0 8px;font-size:inherit}
@@ -141,14 +176,44 @@
     main{padding:2px 8px 12px;flex-direction:column}
     #split{display:none}
     #memoWrap{width:auto;margin-top:8px;min-height:210px;max-height:none}
-    .card{max-height:calc(100dvh - 165px)}
+    .card{max-height:calc(100dvh - 165px - var(--tick))}
+    #tick{font-size:calc(var(--fs) * .95)}
     th,td{padding:4px 10px}
     .meta{flex-wrap:wrap;gap:4px 12px;padding:6px 10px 2px}
     .gatebox{padding:28px 22px}
   }
 </style>
+<script>
+// Paint the saved screen colour before the first frame — otherwise the default
+// LCD green flashes for a moment on every load. Mirrors applyBg() further down;
+// it has to live here, inline, to run ahead of the body.
+(function () {
+  try {
+    var s = document.documentElement.style;
+    var rgb = function (h) { var n = parseInt(h.slice(1), 16); return [(n>>16)&255, (n>>8)&255, n&255]; };
+    var hx  = function (a) { return '#' + ((1<<24)+(a[0]<<16)+(a[1]<<8)+a[2]).toString(16).slice(1); };
+    var dk  = function (h,k) { return hx(rgb(h).map(function (v) { return Math.round(v*k); })); };
+    var lt  = function (h,k) { return hx(rgb(h).map(function (v) { return Math.round(v+(255-v)*k); })); };
+    var bg = localStorage.getItem('nvsBg');
+    if (bg && /^#[0-9a-f]{6}$/i.test(bg)) {
+      var c = rgb(bg), L = (0.299*c[0] + 0.587*c[1] + 0.114*c[2]) / 255;
+      s.setProperty('--lcd', bg);
+      if (L > 0.42) { s.setProperty('--lcd2', dk(bg,0.90)); s.setProperty('--ink', dk(bg,0.22)); s.setProperty('--ink2', dk(bg,0.52)); }
+      else          { s.setProperty('--lcd2', lt(bg,0.12)); s.setProperty('--ink', lt(bg,0.86)); s.setProperty('--ink2', lt(bg,0.52)); }
+    }
+    var sz = parseInt(localStorage.getItem('nvsSize'), 10);
+    if (sz) s.setProperty('--fs', sz + 'px');
+    var w = parseInt(localStorage.getItem('nvsMemoW'), 10);
+    if (w) s.setProperty('--memow', w + 'px');
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
+<div id="splash">
+  <canvas id="splashLogo" width="260" height="100"></canvas>
+  <div id="splashInfo"></div>
+</div>
 <div id="gate">
   <div class="gatebox">
     <h1>NVS Dashboard</h1>
@@ -188,7 +253,7 @@
     <span class="rst" id="bgRst" title="back to the 200LX LCD">rst</span>
   </div>
   <div id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
-  <div id="userbox"><span id="who"></span><button id="signout" class="reload">Sign out</button></div>
+  <div id="userbox"><span id="who"></span><span id="clock"></span><button id="signout" class="reload">Sign out</button></div>
 </header>
 <nav id="tabs"></nav>
 <main>
@@ -196,6 +261,7 @@
   <div id="split" title="drag to resize"></div>
   <section id="memoWrap"></section>
 </main>
+<div id="tick" class="off" title="hover to pause"><div id="tickTrack"></div></div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -266,7 +332,7 @@ auth.onAuthStateChanged(user => {
   }
   // authorised
   show('app');
-  $('who').textContent = email;
+  $('who').textContent = email.split('@')[0];
   setStatus('', 'connected');
   if (wired) return;
   wired = true;
@@ -290,15 +356,24 @@ auth.onAuthStateChanged(user => {
     render();
   });
 
+  // nvs/status keeps the *last* event forever, so the first snapshot after a
+  // reload is a replay, not news. Acting on it would re-open the tab you just
+  // closed (and steal focus) on every single load — so only react to changes.
+  let statusSeen = null;
   db.ref('nvs/status').on('value', snap => {
     const s = snap.val();
     if (!s) return;
+    const stamp = [s.at || 0, s.code || '', s.state || ''].join('|');
+    const isNew = statusSeen !== null && stamp !== statusSeen;
+    statusSeen = stamp;
     if (s.state === 'loading') setStatus('loading', '⏳ ' + s.code + ' — Excel is loading…');
     else if (s.state === 'done') {
       // jump the view to the ticker that just finished loading
-      unhide(s.code);                       // fresh data re-opens a closed tab
-      if (s.code && data[s.code]) { active = s.code; render(); }
-      else pendingFocus = s.code;   // data may arrive a beat later
+      if (isNew) {
+        unhide(s.code);                     // fresh data re-opens a closed tab
+        if (s.code && data[s.code]) { active = s.code; render(); }
+        else pendingFocus = s.code;         // data may arrive a beat later
+      }
       const when = new Date(s.at || Date.now()).toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
       setStatus('done', '✅ ' + (s.msg || s.code) + ' — updated ' + when);
     }
@@ -373,6 +448,126 @@ function loadDbFont(family, key){
     return f.load().then(() => document.fonts.add(f));
   }).catch(e => console.warn('font ' + key + ':', e && e.message));
 }
+// ---- boot splash: MVP drawn as real pixels, then the date and the clock ----
+const WDJ = ['日','月','火','水','木','金','土'];
+const GLYPH = {                       // 7 x 9, two-pixel strokes — proper arcade weight
+  M: ['XX...XX','XXX.XXX','XXXXXXX','XX.X.XX','XX...XX','XX...XX','XX...XX','XX...XX','XX...XX'],
+  V: ['XX...XX','XX...XX','XX...XX','XX...XX','XX...XX','.XX.XX.','.XX.XX.','..XXX..','..XXX..'],
+  P: ['XXXXXX.','XXXXXXX','XX...XX','XX...XX','XXXXXXX','XXXXXX.','XX.....','XX.....','XX.....']
+};
+function drawLogo(){
+  const cv = $('splashLogo');
+  if (!cv || !cv.getContext) return;
+  const g = cv.getContext('2d');
+  const css = getComputedStyle(document.documentElement);
+  const ink = css.getPropertyValue('--ink').trim() || '#26291f';
+  const ink2 = css.getPropertyValue('--ink2').trim() || '#555e49';
+  const S = 10;                                  // one logical pixel = 10 device px
+  g.clearRect(0, 0, cv.width, cv.height);
+  // draw twice: a dim block one pixel down-right, then the solid face on top
+  [[1, 1, ink2], [0, 0, ink]].forEach(([dx, dy, colour]) => {
+    g.fillStyle = colour;
+    let col = 0;
+    'MVP'.split('').forEach(ch => {
+      GLYPH[ch].forEach((row, y) => {
+        row.split('').forEach((c, x) => {
+          if (c === 'X') g.fillRect((col + x + dx) * S, (y + dy) * S, S, S);
+        });
+      });
+      col += 9;                                  // 7 wide + 2 blank columns
+    });
+  });
+}
+function splashText(){
+  const d = new Date();
+  const p2 = n => (n < 10 ? '0' : '') + n;
+  const date = d.getFullYear() + '/' + p2(d.getMonth() + 1) + '/' + p2(d.getDate()) +
+               ' (' + WDJ[d.getDay()] + ')';
+  const time = p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+  const el = $('splashInfo');
+  if (el) el.innerHTML = date + '　' + time + ' <span id="splashCur"></span>' +
+                         '<div class="sub">MISSION VALUE</div>';
+}
+(function(){
+  const sp = $('splash');
+  if (!sp) return;
+  drawLogo();
+  splashText();
+  const t = setInterval(splashText, 1000);
+  setTimeout(() => {
+    clearInterval(t);
+    sp.classList.add('gone');
+    setTimeout(() => sp.remove(), 500);
+  }, 1600);
+})();
+
+// ---- bottom banner: USD/JPY, NKY, TOPIX and Japanese headlines, scrolling ----
+// The feeds have no CORS headers, so server.js relays them at /api/ticker.
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtQ(v){
+  if (v == null) return '';
+  const d = Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 10 ? 2 : 3;
+  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+async function loadTicker(){
+  const box = $('tick'), track = $('tickTrack');
+  if (!box || !track) return;
+  let d;
+  try {
+    const r = await fetch('/api/ticker', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    d = await r.json();
+  } catch (e) { box.classList.add('off'); return; }
+  const bits = [];
+  (d.quotes || []).forEach(q => {
+    let s = '<span class="q"><b>' + esc(q.sym) + '</b> ' + fmtQ(q.last);
+    if (q.pct != null) {
+      const cls = q.pct >= 0 ? 'up' : 'dn';
+      s += ' <span class="' + cls + '">' + (q.chg >= 0 ? '+' : '') + fmtQ(q.chg) +
+           ' (' + (q.pct >= 0 ? '+' : '') + q.pct.toFixed(2) + '%)</span>';
+    }
+    bits.push(s + '</span>');
+  });
+  (d.news || []).forEach(n => {
+    const label = '<span class="src">' + esc(n.src) + '</span>' + esc(n.t);
+    bits.push(n.u ? '<a href="' + esc(n.u) + '" target="_blank" rel="noopener">' + label + '</a>'
+                  : '<span>' + label + '</span>');
+  });
+  if (!bits.length) { box.classList.add('off'); return; }
+  const strip = bits.join('<span class="sep">◆</span>') + '<span class="sep">◆</span>';
+  track.innerHTML = '<span class="run">' + strip + '</span><span class="run">' + strip + '</span>';
+  box.classList.remove('off');
+  // hold a steady ~55 px/sec however long the strip turns out to be
+  requestAnimationFrame(() => {
+    const w = track.scrollWidth / 2;
+    track.style.animationDuration = Math.max(40, Math.round(w / 55)) + 's';
+  });
+}
+
+// ---- header clock: JST alongside US Central, both to the second ----
+function hhmmss(tz){
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit',
+      minute: '2-digit', second: '2-digit', hour12: false }).format(new Date());
+  } catch (e) { return '--:--:--'; }
+}
+(function(){
+  const el = $('clock');
+  if (!el) return;
+  const tick = () => {
+    el.innerHTML = '<b>JST</b> ' + hhmmss('Asia/Tokyo') +
+                   '　<b>CST</b> ' + hhmmss('America/Chicago');
+  };
+  tick();
+  setInterval(tick, 1000);
+})();
+(function(){
+  loadTicker();
+  setInterval(loadTicker, 90000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadTicker(); });
+})();
+
 // ---- screen colour: pick the LCD background, the rest of the palette follows it ----
 const LCD0 = '#a9b09b';
 function rgb(hex){ const n = parseInt(hex.slice(1), 16);
@@ -386,6 +581,7 @@ function applyBg(hex, push){
   if (!/^#[0-9a-f]{6}$/i.test(hex || '')) hex = LCD0;
   const s = document.documentElement.style;
   s.setProperty('--lcd', hex);
+  setTimeout(drawLogo, 0);                // keep the splash in the same palette
   if (lum(hex) > 0.42) {                  // light screen, dark ink — the 200LX LCD
     s.setProperty('--lcd2', dark(hex, 0.90));
     s.setProperty('--ink',  dark(hex, 0.22));

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-fontmenu -->
+<!-- build-20260813-sync -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -215,7 +215,7 @@ let active = null;
 // tabs the user has "closed" (hidden from the strip; data stays in Firebase)
 let hidden = new Set();
 try { hidden = new Set(JSON.parse(localStorage.getItem('nvsHidden') || '[]')); } catch (e) {}
-function saveHidden(){ try { localStorage.setItem('nvsHidden', JSON.stringify([...hidden])); } catch (e) {} }
+function saveHidden(){ try { localStorage.setItem('nvsHidden', JSON.stringify([...hidden])); } catch (e) {} pushUi(); }
 function unhide(code){ if (code && hidden.has(code)) { hidden.delete(code); saveHidden(); } }
 let pendingFocus = null;  // a code whose "done" arrived before its data
 let wired = false;    // data listeners attached only once, after sign-in
@@ -261,6 +261,7 @@ auth.onAuthStateChanged(user => {
   loadDbFont('JFDotShinonome12', 'shinonome12'); // \u6771\u96f2 12-dot
 
   initMemo(email);
+  initUiSync();
 
   db.ref('nvs/data').on('value', snap => {
     data = snap.val() || {};
@@ -305,6 +306,7 @@ function closeTab(code){
     active = codes.length ? codes[0] : null;
   }
   render();
+  pushUi();
 }
 
 function request(code){
@@ -368,6 +370,7 @@ function applyFont(){
     localStorage.setItem('nvsSize', String(size));
     localStorage.setItem('nvsBold', $('boldChk').checked ? '1' : '');
   } catch (e) {}
+  pushUi();
 }
 (function(){
   let font = '', size = '', bold = '';
@@ -414,10 +417,39 @@ document.addEventListener('keydown', e => {
     case 'PageDown':   card.scrollBy(0,  page); e.preventDefault(); break;
     case 'Home':       card.scrollTo({top:0, left:0}); e.preventDefault(); break;
     case 'End':        card.scrollTo({top:card.scrollHeight, left:0}); e.preventDefault(); break;
-    case '[': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i - 1 + codes.length) % codes.length]; render(); } break;
-    case ']': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i + 1) % codes.length]; render(); } break;
+    case '[': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i - 1 + codes.length) % codes.length]; render(); pushUi(); } break;
+    case ']': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i + 1) % codes.length]; render(); pushUi(); } break;
   }
 });
+
+// ---- UI state synced via Firebase (nvs/ui): font, size, bold, closed tabs, active tab ----
+// every device loads the same screen; changes mirror live between open dashboards.
+let uiApplying = false;   // true while applying a remote snapshot (suppresses echo writes)
+function pushUi(){
+  if (uiApplying || !wired) return;
+  const st = { font: $('fontSel').value, size: $('sizeSel').value,
+               bold: $('boldChk').checked ? 1 : 0,
+               hidden: [...hidden], active: active || null,
+               at: firebase.database.ServerValue.TIMESTAMP };
+  db.ref('nvs/ui').set(st).catch(e => console.warn('ui save:', e && e.message));
+}
+function initUiSync(){
+  db.ref('nvs/ui').on('value', snap => {
+    const st = snap.val();
+    if (!st) return;
+    uiApplying = true;
+    try {
+      if (st.font && FONTS[st.font]) $('fontSel').value = st.font;
+      if (st.size) $('sizeSel').value = String(st.size);
+      $('boldChk').checked = !!st.bold;
+      applyFont();
+      hidden = new Set(st.hidden || []);
+      saveHidden();
+      if ('active' in st && st.active !== active) { active = st.active || null; }
+      render();
+    } finally { uiApplying = false; }
+  });
+}
 
 // ---- MEMO: shared notepad at nvs/memo — realtime, last-write-wins like a tiny shared doc ----
 let memoTimer = null;
@@ -476,7 +508,7 @@ function render(){
     x.className = 'x'; x.textContent = '×'; x.title = 'close tab';
     x.onclick = ev => { ev.stopPropagation(); closeTab(c); };
     t.appendChild(x);
-    t.onclick = () => { active = c; render(); };
+    t.onclick = () => { active = c; render(); pushUi(); };
     $('tabs').appendChild(t);
   });
   // hidden tabs are never lost — one click restores them all

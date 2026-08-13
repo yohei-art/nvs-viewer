@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-cal -->
+<!-- build-20260814-keys -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -447,12 +447,25 @@ function applyFont(){
   $('bgRst').onclick  = () => applyBg(LCD0, true);
 })();
 
-// ---- keyboard: ←/→ walk the memo's calendar, shift+←/→ scroll the sheet sideways,
-//      ↑/↓/PgUp/PgDn scroll the grid, [ and ] switch companies ----
+// ---- keyboard ----------------------------------------------------------
+//   shift+←/→   walk the calendar  (works even while typing in the memo)
+//   ←/→         walk the calendar  (outside text fields)
+//   alt+←/→     scroll the sheet sideways
+//   ↑/↓ PgUp/PgDn Home/End   scroll the sheet
+//   j / k       move the task highlight,  x  toggles it done
+//   t           jump to today,  [ / ]  switch companies
 document.addEventListener('keydown', e => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+  // day navigation is the one binding that survives a focused text field
+  if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey &&
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    if (window.nvsMemo) { window.nvsMemo.go(e.key === 'ArrowLeft' ? -1 : 1); e.preventDefault(); }
+    return;
+  }
+  if (typing) return;
+  if (e.ctrlKey || e.metaKey) return;
   const card = $('card');
   if (!card) return;
   const codes = sortedCodes();
@@ -461,11 +474,11 @@ document.addEventListener('keydown', e => {
     case 'ArrowUp':    card.scrollBy(0, -step); e.preventDefault(); break;
     case 'ArrowDown':  card.scrollBy(0,  step); e.preventDefault(); break;
     case 'ArrowLeft':
-      if (e.shiftKey) card.scrollBy(-140, 0);
+      if (e.altKey) card.scrollBy(-140, 0);
       else if (window.nvsMemo) window.nvsMemo.go(-1);
       e.preventDefault(); break;
     case 'ArrowRight':
-      if (e.shiftKey) card.scrollBy(140, 0);
+      if (e.altKey) card.scrollBy(140, 0);
       else if (window.nvsMemo) window.nvsMemo.go(1);
       e.preventDefault(); break;
     case 'PageUp':     card.scrollBy(0, -page); e.preventDefault(); break;
@@ -474,6 +487,13 @@ document.addEventListener('keydown', e => {
     case 'End':        card.scrollTo({top:card.scrollHeight, left:0}); e.preventDefault(); break;
     case '[': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i - 1 + codes.length) % codes.length]; render(); pushUi(); } break;
     case ']': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i + 1) % codes.length]; render(); pushUi(); } break;
+  }
+  if (e.altKey) return;
+  switch (e.key.toLowerCase()) {
+    case 't': if (window.nvsMemo) { window.nvsMemo.today(); e.preventDefault(); } break;
+    case 'j': if (window.nvsMemo) { window.nvsMemo.move(1);  e.preventDefault(); } break;
+    case 'k': if (window.nvsMemo) { window.nvsMemo.move(-1); e.preventDefault(); } break;
+    case 'x': if (window.nvsMemo) { window.nvsMemo.toggle(); e.preventDefault(); } break;
   }
 });
 

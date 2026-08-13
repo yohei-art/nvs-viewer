@@ -4,100 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-dtmfont -->
+<!-- build-20260813-200lx -->
 <style>
-  /* Determination (Undertale) webfonts — Latin/digits only; Japanese falls back to system fonts.
-     Hosted by Carter Sande's Undertale Web Fonts (GitLab Pages, CORS-enabled). */
-  @font-face{font-family:'Determination Sans';
-    src:url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationsansweb-webfont.woff2') format('woff2'),
-        url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationsansweb-webfont.woff') format('woff');
-    font-weight:normal;font-style:normal;font-display:swap;}
-  @font-face{font-family:'Determination Mono';
-    src:url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationmonoweb-webfont.woff2') format('woff2'),
-        url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationmonoweb-webfont.woff') format('woff');
-    font-weight:normal;font-style:normal;font-display:swap;}
+  @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
+  /* ---- HP 200LX / Lotus 1-2-3 ---- one font, one ink, one LCD ---- */
   :root{
-    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --line:#2a2f3c;
-    --text:#e8eaf0; --dim:#9aa3b2; --accent:#4f8ef7; --ok:#3fb96c; --err:#e5534b; --warn:#d9a239;
+    --lcd:#a9b09b;   /* LCD screen      */
+    --lcd2:#99a18b;  /* LCD shadow      */
+    --ink:#26291f;   /* pixel ink       */
+    --ink2:#555e49;  /* dim ink         */
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-       font:14px/1.55 'Determination Sans',-apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI",Roboto,sans-serif}
-  header{display:flex;align-items:center;gap:14px;padding:14px 20px;
-         padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));
-         background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
-  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.02em}
+  ::selection{background:var(--ink);color:var(--lcd)}
+  html,body{height:100%}
+  body{margin:0;background:var(--lcd);color:var(--ink);
+       font:16px/1.4 'DotGothic16',monospace}
+  /* top bar = Lotus inverse status line */
+  header{display:flex;align-items:center;gap:14px;padding:6px 14px;
+         padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
+         background:var(--ink);color:var(--lcd);flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:400}
   #tickerBox{display:flex;gap:8px;align-items:center}
-  #ticker{width:130px;padding:9px 11px;border-radius:6px;border:1px solid var(--line);
-          background:var(--panel2);color:var(--text);font-size:16px;outline:none}
-  #ticker:focus{border-color:var(--accent)}
-  button{padding:9px 16px;border:0;border-radius:6px;background:var(--accent);color:#fff;
-         font-size:14px;cursor:pointer}
-  button:disabled{background:#3a3f4d;cursor:default}
-  #status{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:7px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#555;flex:none}
-  .dot.loading{background:var(--warn);animation:pulse 1s infinite}
-  .dot.done{background:var(--ok)} .dot.error{background:var(--err)} .dot.notfound{background:var(--warn)}
-  @keyframes pulse{50%{opacity:.35}}
-  nav{display:flex;gap:6px;padding:10px 20px 0;flex-wrap:wrap}
-  nav .tab{padding:7px 14px;border-radius:8px 8px 0 0;background:var(--panel);
-           border:1px solid var(--line);border-bottom:none;color:var(--dim);cursor:pointer;
-           font-size:13px;user-select:none}
-  nav .tab.active{background:var(--panel2);color:var(--text);font-weight:600}
-  nav .tab small{color:var(--dim);font-weight:400;margin-left:6px}
-  nav .tab .x{margin-left:8px;padding:0 5px;border-radius:4px;color:var(--dim);font-weight:400}
-  nav .tab .x:hover{color:#fff;background:var(--err)}
-  nav .restore{padding:7px 12px;border-radius:8px 8px 0 0;border:1px dashed var(--line);
-               color:var(--dim);cursor:pointer;font-size:12px;user-select:none;background:transparent}
-  nav .restore:hover{color:var(--text);border-color:var(--accent)}
-  main{padding:0 20px 30px;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
-  .card{background:var(--panel2);border:1px solid var(--line);border-radius:0 8px 8px 8px;
-        overflow:auto;-webkit-overflow-scrolling:touch;
-        max-height:calc(100vh - 170px);max-height:calc(100dvh - 170px)}
-  .meta{display:flex;gap:18px;align-items:baseline;padding:12px 16px 4px;color:var(--dim);font-size:12px}
-  .meta b{color:var(--text);font-size:16px}
-  table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;
-        font-family:'Determination Mono',"Hiragino Sans","Yu Gothic UI",Roboto,sans-serif}
-  th,td{padding:6px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
-  th{position:sticky;top:0;z-index:2;background:var(--panel);text-align:right;font-weight:600;font-size:12.5px}
-  /* keep the row-label column pinned while wide tables scroll sideways (esp. on phones) */
+  #ticker{width:110px;padding:2px 8px;border:0;border-radius:0;
+          background:var(--lcd);color:var(--ink);font:inherit;outline:none;text-transform:uppercase}
+  #ticker::placeholder{color:var(--ink2)}
+  button{padding:2px 10px;border:0;border-radius:0;background:var(--lcd);color:var(--ink);
+         font:inherit;cursor:pointer}
+  button:hover{background:var(--lcd2)}
+  button:disabled{background:var(--ink2);color:var(--lcd);cursor:default}
+  #status{font-size:16px;color:var(--lcd);display:flex;align-items:center;gap:8px;font:inherit}
+  .dot{width:8px;height:8px;border-radius:0;background:var(--lcd2);flex:none}
+  .dot.loading{background:var(--lcd);animation:pulse .8s steps(2,end) infinite}
+  .dot.done{background:var(--lcd)} .dot.error{background:var(--lcd);animation:pulse .4s steps(2,end) infinite} .dot.notfound{background:var(--lcd2)}
+  @keyframes pulse{50%{opacity:.15}}
+  #userbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--lcd2)}
+  /* tabs = plain text, active is inverse video */
+  nav{display:flex;gap:2px;padding:4px 14px 0;flex-wrap:wrap}
+  nav .tab{padding:1px 8px;border:0;border-radius:0;background:transparent;
+           color:var(--ink2);cursor:pointer;font-size:14px;user-select:none}
+  nav .tab.active{background:var(--ink);color:var(--lcd);font-weight:400}
+  nav .tab small{color:inherit;opacity:.75;font-weight:400;margin-left:6px}
+  nav .tab .x{margin-left:7px;padding:0 3px;color:inherit;opacity:.6;font-weight:400}
+  nav .tab .x:hover{opacity:1;background:var(--ink);color:var(--lcd)}
+  nav .restore{padding:1px 8px;border:0;color:var(--ink2);cursor:pointer;font-size:14px;
+               user-select:none;background:transparent;text-decoration:underline dotted}
+  nav .restore:hover{color:var(--ink)}
+  main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+  .card{background:var(--lcd);border:1px solid var(--ink);border-radius:0;
+        overflow:auto;-webkit-overflow-scrolling:touch;outline:none;
+        max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
+  .card::-webkit-scrollbar{width:12px;height:12px}
+  .card::-webkit-scrollbar-track{background:var(--lcd2)}
+  .card::-webkit-scrollbar-thumb{background:var(--ink);border:2px solid var(--lcd2)}
+  .meta{display:flex;gap:16px;align-items:baseline;padding:6px 12px 2px;color:var(--ink2);font-size:14px}
+  .meta b{color:var(--ink);font-size:16px;font-weight:400}
+  table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-family:inherit}
+  th,td{padding:2px 12px;border:0;white-space:nowrap;font-size:16px;line-height:1.5}
+  /* column header row = inverse video like Lotus */
+  th{position:sticky;top:0;z-index:2;background:var(--ink);color:var(--lcd);
+     text-align:right;font-weight:400}
   td:first-child,th:first-child{position:sticky;left:0}
   th:first-child{text-align:left;z-index:3}
   td{text-align:right}
-  td:first-child{text-align:left;color:var(--text);z-index:1;background:var(--panel2)}
-  td.field{color:#5b6474;font-size:11px;text-align:left}
-  th.fc{color:var(--warn)}
-  td.num{color:#cfe0ff}
-  tr:hover td{background:rgba(79,142,247,.06)}
-  #empty{padding:60px;text-align:center;color:var(--dim)}
-  .reload{margin-left:8px;background:transparent;border:1px solid var(--line);color:var(--dim);
-          padding:4px 10px;font-size:12px}
-  .reload:hover{color:var(--text);border-color:var(--accent)}
+  td:first-child{text-align:left;color:var(--ink);z-index:1;background:var(--lcd)}
+  td.field{color:var(--ink2);font-size:13px;text-align:left}
+  th.fc{background:var(--ink2);color:var(--lcd)}
+  td.num{color:var(--ink)}
+  tr:hover td{background:var(--lcd2)}
+  #empty{padding:60px;text-align:center;color:var(--ink2)}
+  .reload{margin-left:8px;background:transparent;border:1px solid var(--ink2);color:var(--ink2);
+          padding:0 8px;font-size:13px}
+  .reload:hover{color:var(--lcd);background:var(--ink);border-color:var(--ink)}
   #gate{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-  .gatebox{background:var(--panel2);border:1px solid var(--line);border-radius:14px;
-           padding:40px 44px;max-width:420px;text-align:center}
-  .gatebox h1{font-size:20px;margin:0 0 8px}
-  .gatebox p{color:var(--dim);margin:0 0 22px}
-  #signin{background:#fff;color:#202124;font-weight:600;border-radius:8px;padding:11px 20px;font-size:14px}
-  #signin:hover{background:#f1f3f4}
-  #gateMsg{margin-top:16px;font-size:13px;color:var(--dim);min-height:20px}
-  #userbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)}
-  header{gap:14px}
-  /* ---- phones: stack the header, scroll the tab strip, thumb-size the input ---- */
+  .gatebox{background:var(--lcd);border:1px solid var(--ink);border-radius:0;
+           padding:36px 40px;max-width:420px;text-align:center}
+  .gatebox h1{font-size:20px;margin:0 0 8px;font-weight:400}
+  .gatebox p{color:var(--ink2);margin:0 0 20px}
+  #signin{background:var(--ink);color:var(--lcd);border-radius:0;padding:8px 18px;font-size:16px}
+  #signin:hover{background:var(--ink2)}
+  #gateMsg{margin-top:14px;font-size:14px;color:var(--ink2);min-height:20px}
+  /* ---- phones ---- */
   @media (max-width:640px){
-    header{padding:10px 12px;gap:8px 10px}
-    header h1{order:1;font-size:14px}
-    #userbox{order:2;font-size:11px;gap:8px}
+    header{padding:6px 10px;gap:8px 10px}
+    header h1{order:1}
+    #userbox{order:2;font-size:12px;gap:8px}
     #tickerBox{order:3;flex:1 1 100%}
-    #ticker{flex:1 1 auto;width:auto}
-    #status{order:4;flex:1 1 100%;font-size:12px}
-    nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px 0}
-    nav .tab{flex:0 0 auto}
-    main{padding:0 10px 24px}
-    .card{max-height:calc(100dvh - 200px)}
-    th,td{padding:8px 11px}
-    .meta{flex-wrap:wrap;gap:6px 14px;padding:10px 12px 4px}
-    .gatebox{padding:32px 24px}
+    #ticker{flex:1 1 auto;width:auto;padding:6px 8px}
+    #status{order:4;flex:1 1 100%;font-size:14px}
+    nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 10px 0}
+    nav .tab{flex:0 0 auto;padding:4px 8px}
+    main{padding:2px 8px 12px}
+    .card{max-height:calc(100dvh - 165px)}
+    th,td{padding:4px 10px}
+    .meta{flex-wrap:wrap;gap:4px 12px;padding:6px 10px 2px}
+    .gatebox{padding:28px 22px}
   }
 </style>
 </head>
@@ -260,6 +260,30 @@ $('ticker').addEventListener('input', e => {
 });
 $('go').onclick = () => request($('ticker').value);
 $('ticker').addEventListener('keydown', e => { if (e.key === 'Enter') request($('ticker').value); });
+
+
+// ---- keyboard: scroll the sheet like a 1-2-3 grid; [ and ] switch companies ----
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const card = $('card');
+  if (!card) return;
+  const codes = sortedCodes();
+  const step = 48, page = Math.max(80, card.clientHeight - 40);
+  switch (e.key) {
+    case 'ArrowUp':    card.scrollBy(0, -step); e.preventDefault(); break;
+    case 'ArrowDown':  card.scrollBy(0,  step); e.preventDefault(); break;
+    case 'ArrowLeft':  card.scrollBy(-140, 0);  e.preventDefault(); break;
+    case 'ArrowRight': card.scrollBy( 140, 0);  e.preventDefault(); break;
+    case 'PageUp':     card.scrollBy(0, -page); e.preventDefault(); break;
+    case 'PageDown':   card.scrollBy(0,  page); e.preventDefault(); break;
+    case 'Home':       card.scrollTo({top:0, left:0}); e.preventDefault(); break;
+    case 'End':        card.scrollTo({top:card.scrollHeight, left:0}); e.preventDefault(); break;
+    case '[': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i - 1 + codes.length) % codes.length]; render(); } break;
+    case ']': if (codes.length > 1 && active) { const i = codes.indexOf(active); active = codes[(i + 1) % codes.length]; render(); } break;
+  }
+});
 
 function fmt(v){
   if (typeof v === 'number') {

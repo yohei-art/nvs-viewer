@@ -1,5 +1,5 @@
 /* NVS daily memo — per-day markdown notes + carried-forward checklist.
-   memo-20260813b
+   memo-20260814a
    Depends on globals defined in index.html: db (firebase.database()), firebase.
    Defines window.initMemo(email) and window.nvsMemo.go(n).
 
@@ -30,6 +30,9 @@
     '#taskList:empty{display:none;border:0}',
     '.tk{display:flex;align-items:flex-start;gap:5px;padding:0 2px;line-height:1.35}',
     '.tk:hover{background:var(--lcd2)}',
+    '.tk.cur{background:var(--ink);color:var(--lcd)}',
+    '.tk.cur .org,.tk.cur .go{color:var(--lcd2)}',
+    '.tk.cur.done .tx,.tk.cur.done .ck{color:var(--lcd2)}',
     '.tk .ck{cursor:pointer;flex:none;width:1.2em;text-align:center}',
     '.tk .ck:hover{background:var(--ink);color:var(--lcd)}',
     '.tk .tx{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;cursor:text}',
@@ -127,6 +130,7 @@
   var day = today();
   var me = '';
   var pendingDone = null;    // task awaiting its next-step entry
+  var cursor = null;         // id of the highlighted task (keyboard: j/k, x toggles)
   var saveTimer = null, typing = 0;
   var wrap, dayLbl, list, ed, stat, ready = false;
 
@@ -207,23 +211,52 @@
     el.addEventListener('touchstart', function (e) { e.preventDefault(); fn(); }, { passive: false });
   }
 
+  // ---------- keyboard task cursor: j/k move it, x toggles it ----------
+  function ids() { return forDay(day).map(function (p) { return p[0]; }); }
+  function moveCursor(n) {
+    var list_ = ids();
+    if (!list_.length) { cursor = null; return; }
+    var i = list_.indexOf(cursor);
+    i = (i < 0) ? (n > 0 ? 0 : list_.length - 1) : Math.max(0, Math.min(list_.length - 1, i + n));
+    cursor = list_[i];
+    renderTasks();
+    var el = list.querySelector('.tk.cur');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }
+  function finish(id, next) {
+    var patch = { done: true, doneAt: day };
+    if (next) patch.next = next;
+    upTask(id, patch);
+    pendingDone = null;
+    renderTasks();
+  }
+  function toggle(id) {
+    id = id || cursor || ids()[0];
+    if (!id) return;
+    cursor = id;
+    var t = tasks[id];
+    if (!t) return;
+    if (t.done) { upTask(id, { done: false, doneAt: null, next: null }); return; }
+    pendingDone = (pendingDone === id) ? null : id;   // asks for the next step
+    renderTasks();
+  }
+
   function renderTasks() {
     if (!list) return;
+    var alive = ids();
+    if (cursor && alive.indexOf(cursor) < 0) cursor = null;   // it moved off this day
     list.innerHTML = '';
     forDay(day).forEach(function (pair) {
       var id = pair[0], t = pair[1];
       var row = document.createElement('div');
-      row.className = 'tk' + (t.done ? ' done' : '');
+      row.className = 'tk' + (t.done ? ' done' : '') + (cursor === id ? ' cur' : '');
+      row.dataset.id = id;
 
       var ck = document.createElement('span');
       ck.className = 'ck';
       ck.textContent = t.done ? '☑' : '☐';
       ck.title = t.done ? 'reopen' : 'mark done — asks for the next step';
-      onTap(ck, function () {
-        if (t.done) { upTask(id, { done: false, doneAt: null }); return; }
-        pendingDone = (pendingDone === id) ? null : id;
-        renderTasks();
-      });
+      onTap(ck, function () { cursor = id; toggle(id); });
       row.appendChild(ck);
 
       var tx = document.createElement('span');
@@ -236,7 +269,11 @@
         if (v && v !== t.text) upTask(id, { text: v });
         else tx.innerHTML = inline(t.text, false);
       };
+      tx.onfocus = function () { if (cursor !== id) { cursor = id; } };
       tx.onkeydown = function (e) {
+        if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+          e.preventDefault(); e.stopPropagation(); tx.blur(); go(e.key === 'ArrowLeft' ? -1 : 1); return;
+        }
         e.stopPropagation();
         if (e.key === 'Enter') { e.preventDefault(); tx.blur(); }
         else if (e.key === 'Escape') { tx.innerHTML = inline(t.text, false); tx.blur(); }
@@ -274,16 +311,22 @@
         inp.placeholder = 'next step (required) — Enter to finish, Esc to cancel';
         box.appendChild(inp);
         list.appendChild(box);
+        inp.placeholder = 'next step — Enter to add it, Esc to just finish';
         inp.onkeydown = function (e) {
+          if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+            e.preventDefault(); e.stopPropagation(); go(e.key === 'ArrowLeft' ? -1 : 1); return;
+          }
           e.stopPropagation();
           if (e.key === 'Enter') {
             var v = inp.value.trim();
-            if (!v) { inp.placeholder = 'a next step is required — Esc to cancel'; return; }
-            upTask(id, { done: true, doneAt: day, next: v });
+            if (!v) { finish(id, ''); return; }
+            finish(id, v);
             addTask(v, day);                 // the next step becomes a fresh open task
-            pendingDone = null;
-            renderTasks();
-          } else if (e.key === 'Escape') { pendingDone = null; renderTasks(); }
+          } else if (e.key === 'Escape') {
+            // nothing typed -> just finish the task; something typed -> abandon
+            if (!inp.value.trim()) finish(id, '');
+            else { pendingDone = null; renderTasks(); }
+          }
         };
         setTimeout(function () { inp.focus(); }, 0);
       }
@@ -461,7 +504,14 @@
 
   function wireEditor() {
     ed.addEventListener('keydown', function (e) {
+      // shift+←/→ walks the calendar even mid-sentence
+      if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault(); e.stopPropagation();
+        go(e.key === 'ArrowLeft' ? -1 : 1);
+        return;
+      }
       e.stopPropagation();                    // sheet/day shortcuts never fire while typing
+      if (e.key === 'Escape') { e.preventDefault(); flush(); ed.blur(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); newline(); return; }
       if (e.key === 'Backspace') { if (backspace()) e.preventDefault(); return; }
@@ -501,7 +551,9 @@
                          (day === t ? '' : day < t ? ' ◂' : ' ▸');
     dayLbl.className = 'lbl' + (day === t ? '' : ' other');
     renderTasks();
-    if (document.activeElement !== ed) paint(-1);
+    var editing = document.activeElement === ed;
+    paint(-1);                          // always repaint: the day may have changed under us
+    if (editing) setCaret(0, 0);        // keep the caret somewhere sane on the new day
   }
 
   // ---------- boot ----------
@@ -534,12 +586,22 @@
     setText(notes[day] || '');
     renderAll();
     window.addEventListener('beforeunload', flush);
+    // a tab left open overnight should still open on the real today
+    window.addEventListener('focus', function () {
+      if (day !== today() && !document.getElementById('memoEd').contains(document.activeElement)) {
+        var wasToday = parseDay(day) < new Date();
+        if (wasToday) renderAll();     // refresh the ◂/▸ marker at least
+      }
+    });
   }
 
   window.initMemo = init;
   window.nvsMemo = {
     go: function (n) { go(n); },
     today: function () { go(0, today()); },
-    day: function () { return day; }
+    move: function (n) { moveCursor(n); },
+    toggle: function () { toggle(); },
+    day: function () { return day; },
+    editing: function () { return document.activeElement === ed; }
   };
 })();

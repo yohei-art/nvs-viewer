@@ -4,15 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-closetabs -->
+<!-- build-20260813-dtmfont -->
 <style>
+  /* Determination (Undertale) webfonts — Latin/digits only; Japanese falls back to system fonts.
+     Hosted by Carter Sande's Undertale Web Fonts (GitLab Pages, CORS-enabled). */
+  @font-face{font-family:'Determination Sans';
+    src:url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationsansweb-webfont.woff2') format('woff2'),
+        url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationsansweb-webfont.woff') format('woff');
+    font-weight:normal;font-style:normal;font-display:swap;}
+  @font-face{font-family:'Determination Mono';
+    src:url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationmonoweb-webfont.woff2') format('woff2'),
+        url('https://cartr.gitlab.io/undertale-fonts/webfonts/determinationmonoweb-webfont.woff') format('woff');
+    font-weight:normal;font-style:normal;font-display:swap;}
   :root{
     --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --line:#2a2f3c;
     --text:#e8eaf0; --dim:#9aa3b2; --accent:#4f8ef7; --ok:#3fb96c; --err:#e5534b; --warn:#d9a239;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
-       font:14px/1.55 -apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI",Roboto,sans-serif}
+       font:14px/1.55 'Determination Sans',-apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI",Roboto,sans-serif}
   header{display:flex;align-items:center;gap:14px;padding:14px 20px;
          padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));
          background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -46,7 +56,8 @@
         max-height:calc(100vh - 170px);max-height:calc(100dvh - 170px)}
   .meta{display:flex;gap:18px;align-items:baseline;padding:12px 16px 4px;color:var(--dim);font-size:12px}
   .meta b{color:var(--text);font-size:16px}
-  table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+  table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;
+        font-family:'Determination Mono',"Hiragino Sans","Yu Gothic UI",Roboto,sans-serif}
   th,td{padding:6px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
   th{position:sticky;top:0;z-index:2;background:var(--panel);text-align:right;font-weight:600;font-size:12.5px}
   /* keep the row-label column pinned while wide tables scroll sideways (esp. on phones) */

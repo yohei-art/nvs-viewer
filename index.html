@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-md -->
+<!-- build-20260813-fix -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -101,8 +101,14 @@
   tr:hover td{background:var(--lcd2)}
   #empty{padding:60px;text-align:center;color:var(--ink2)}
   /* ---- MEMO: MemoExpress-style shared notepad, split pane on the right ---- */
-  #split{width:7px;flex:none;cursor:col-resize;background:var(--lcd2);border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+  #split{width:14px;flex:none;cursor:col-resize;background:var(--lcd2);touch-action:none;
+         border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
+         display:flex;align-items:center;justify-content:center;user-select:none}
+  #split::before{content:'';width:4px;height:34px;
+         border-left:2px dotted var(--ink);border-right:2px dotted var(--ink)}
   #split:hover,#split.on{background:var(--ink2)}
+  #split:hover::before,#split.on::before{border-color:var(--lcd)}
+  body.dragging{cursor:col-resize;user-select:none;-webkit-user-select:none}
   #memoWrap{flex:none;width:var(--memow);min-width:140px;display:flex;flex-direction:column;
             border:1px solid var(--ink);max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
   #memoBar{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--lcd);
@@ -245,6 +251,9 @@ function saveHidden(){ try { localStorage.setItem('nvsHidden', JSON.stringify([.
 function unhide(code){ if (code && hidden.has(code)) { hidden.delete(code); saveHidden(); } }
 let pendingFocus = null;  // a code whose "done" arrived before its data
 let wired = false;    // data listeners attached only once, after sign-in
+// declared up here (var, not let) because saveHidden()/applyFont() call pushUi()
+// while the script is still executing — a `let` further down would be in its TDZ.
+var uiApplying = false;   // true while applying a remote snapshot (suppresses echo writes)
 
 const $ = id => document.getElementById(id);
 function setStatus(cls, text){ $('dot').className = 'dot ' + cls; $('statusText').textContent = text; }
@@ -326,13 +335,13 @@ function sortedCodes(){
 }
 
 function closeTab(code){
-  hidden.add(code); saveHidden();
-  if (active === code) {
-    const codes = sortedCodes();
+  hidden.add(code);
+  if (active === code) {                 // settle the new active tab *before* saving,
+    const codes = sortedCodes();         // so the pushed state is already correct
     active = codes.length ? codes[0] : null;
   }
-  render();
-  pushUi();
+  render();                              // repaint immediately — never wait on the network
+  saveHidden();                          // persist locally + push to Firebase
 }
 
 function request(code){
@@ -461,25 +470,35 @@ document.addEventListener('keydown', e => {
     w = Math.max(140, Math.min(r.width - 220, w));
     document.documentElement.style.setProperty('--memow', w + 'px');
   }
-  sp.addEventListener('mousedown', e => { drag = true; sp.classList.add('on'); e.preventDefault(); });
-  window.addEventListener('mousemove', e => { if (drag) move(e.clientX); });
+  sp.addEventListener('mousedown', e => {
+    drag = true; sp.classList.add('on'); document.body.classList.add('dragging'); e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => { if (drag) { move(e.clientX); e.preventDefault(); } });
   window.addEventListener('mouseup', () => {
+    if (!drag) return;
+    drag = false; sp.classList.remove('on'); document.body.classList.remove('dragging');
+    const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300;
+    try { localStorage.setItem('nvsMemoW', String(w)); } catch (e) {}
+    pushUi();
+  });
+  sp.addEventListener('touchstart', e => { drag = true; sp.classList.add('on'); e.preventDefault(); }, {passive:false});
+  window.addEventListener('touchmove', e => { if (drag && e.touches[0]) { move(e.touches[0].clientX); e.preventDefault(); } }, {passive:false});
+  window.addEventListener('touchend', () => {
     if (!drag) return;
     drag = false; sp.classList.remove('on');
     const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300;
     try { localStorage.setItem('nvsMemoW', String(w)); } catch (e) {}
     pushUi();
   });
-  sp.addEventListener('touchstart', e => { drag = true; sp.classList.add('on'); }, {passive:true});
-  window.addEventListener('touchmove', e => { if (drag && e.touches[0]) move(e.touches[0].clientX); }, {passive:true});
-  window.addEventListener('touchend', () => { if (drag){ drag = false; sp.classList.remove('on'); pushUi(); } });
 })();
 
 // ---- UI state synced via Firebase (nvs/ui): font, size, bold, closed tabs, active tab ----
 // every device loads the same screen; changes mirror live between open dashboards.
-let uiApplying = false;   // true while applying a remote snapshot (suppresses echo writes)
 function pushUi(){
   if (uiApplying || !wired) return;
+  try { pushUiNow(); } catch (e) { console.warn('ui push:', e && e.message); }
+}
+function pushUiNow(){
   const st = { font: $('fontSel').value, size: $('sizeSel').value,
                bold: $('boldChk').checked ? 1 : 0,
                hidden: [...hidden], active: active || null,
@@ -594,7 +613,7 @@ function render(){
     r.className = 'restore';
     r.textContent = '+ ' + nHidden + ' closed — restore';
     r.title = 'show closed tabs again';
-    r.onclick = () => { hidden.clear(); saveHidden(); if (!active) { const cs = sortedCodes(); active = cs[0] || null; } render(); };
+    r.onclick = () => { hidden.clear(); if (!active) { const cs = sortedCodes(); active = cs[0] || null; } render(); saveHidden(); };
     $('tabs').appendChild(r);
   }
 

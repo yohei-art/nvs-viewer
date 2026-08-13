@@ -1,5 +1,5 @@
 /* NVS daily memo — per-day markdown notes + carried-forward checklist.
-   memo-20260814a
+   memo-20260814b
    Depends on globals defined in index.html: db (firebase.database()), firebase.
    Defines window.initMemo(email) and window.nvsMemo.go(n).
 
@@ -38,14 +38,15 @@
     '.tk .tx{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;cursor:text}',
     '.tk .tx:focus{outline:0;background:var(--lcd2)}',
     '.tk .org{flex:none;color:var(--ink2)}',
+    '.tk .org.new{opacity:.45}',
     '.tk .go{cursor:pointer;flex:none;padding:0 3px;color:var(--ink2)}',
     '.tk .go:hover{background:var(--ink);color:var(--lcd)}',
     '.tk.done .tx{text-decoration:line-through;color:var(--ink2)}',
     '.tk.done .ck{color:var(--ink2)}',
-    '.nx{display:flex;gap:4px;padding:0 2px 0 1.6em;color:var(--ink2)}',
-    '.nxin{display:flex;gap:5px;align-items:center;padding:1px 2px 1px 1.6em;background:var(--lcd2)}',
-    '.nxin input{flex:1 1 auto;min-width:0;border:0;outline:0;background:var(--lcd);color:var(--ink);',
-    '            font:inherit;padding:0 4px}',
+    '.tk .rm{cursor:pointer;flex:none;padding:0 3px;color:var(--ink2)}',
+    '.tk .rm:hover{background:var(--ink);color:var(--lcd)}',
+    '.tk.cur .rm{color:var(--lcd2)}',
+    '#memoUndo{cursor:pointer;text-decoration:underline dotted;color:var(--lcd)}',
     '#memoEd{flex:1 1 auto;min-height:60px;overflow:auto;padding:3px 8px;outline:0;',
     '        white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}',
     '#memoEd .ln{min-height:1.35em;line-height:1.35}',
@@ -129,10 +130,11 @@
   var lines = [''];          // the editor's model for the day on screen
   var day = today();
   var me = '';
-  var pendingDone = null;    // task awaiting its next-step entry
   var cursor = null;         // id of the highlighted task (keyboard: j/k, x toggles)
+  var trash = null;          // the last deleted task, kept briefly so it can be undone
+  var trashTimer = null;
   var saveTimer = null, typing = 0;
-  var wrap, dayLbl, list, ed, stat, ready = false;
+  var wrap, dayLbl, list, ed, stat, undo, ready = false;
 
   function setStat(s) { if (stat) stat.textContent = s; }
   function text() { return lines.join('\n'); }
@@ -143,7 +145,8 @@
     wrap = document.getElementById('memoWrap');
     if (!wrap) return false;
     wrap.innerHTML =
-      '<div id="memoBar"><span class="mtitle">MEMO</span><span id="memoStat"></span></div>' +
+      '<div id="memoBar"><span class="mtitle">MEMO</span>' +
+        '<span id="memoUndo" style="display:none"></span><span id="memoStat"></span></div>' +
       '<div id="dayBar">' +
         '<span class="nav" id="dPrev" title="previous day (←)">‹</span>' +
         '<span class="lbl" id="dLbl"></span>' +
@@ -156,6 +159,8 @@
     list = document.getElementById('taskList');
     ed = document.getElementById('memoEd');
     stat = document.getElementById('memoStat');
+    undo = document.getElementById('memoUndo');
+    undo.onclick = undelete;
     document.getElementById('dPrev').onclick = function () { go(-1); };
     document.getElementById('dNext').onclick = function () { go(1); };
     document.getElementById('dTdy').onclick = function () { go(0, today()); };
@@ -166,7 +171,6 @@
   function go(n, to) {
     flush();
     day = to || shiftDay(day, n);
-    pendingDone = null;
     setText(notes[day] || '');
     renderAll();
   }
@@ -223,22 +227,43 @@
     var el = list.querySelector('.tk.cur');
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
   }
-  function finish(id, next) {
-    var patch = { done: true, doneAt: day };
-    if (next) patch.next = next;
-    upTask(id, patch);
-    pendingDone = null;
-    renderTasks();
-  }
+  // done is done — one keystroke, no follow-up prompt
   function toggle(id) {
     id = id || cursor || ids()[0];
     if (!id) return;
     cursor = id;
     var t = tasks[id];
     if (!t) return;
-    if (t.done) { upTask(id, { done: false, doneAt: null, next: null }); return; }
-    pendingDone = (pendingDone === id) ? null : id;   // asks for the next step
-    renderTasks();
+    upTask(id, t.done ? { done: false, doneAt: null } : { done: true, doneAt: day });
+  }
+
+  // delete for good, with a short window to take it back
+  function removeTask(id) {
+    id = id || cursor;
+    if (!id || !tasks[id]) return;
+    var list_ = ids(), i = list_.indexOf(id);
+    cursor = list_[i + 1] || list_[i - 1] || null;    // keep the highlight somewhere useful
+    var t = tasks[id];
+    trash = { text: t.text, created: t.created, due: t.due, done: !!t.done, doneAt: t.doneAt || null, by: t.by || me };
+    db.ref('nvs/tasks/' + id).remove()
+      .catch(function (e) { setStat('delete failed: ' + (e && e.message)); });
+    undo.textContent = 'deleted “' + String(t.text).slice(0, 22) + '” — undo';
+    undo.style.display = '';
+    clearTimeout(trashTimer);
+    trashTimer = setTimeout(function () { trash = null; undo.style.display = 'none'; }, 15000);
+  }
+  function undelete() {
+    if (!trash) return;
+    var t = trash;
+    trash = null;
+    clearTimeout(trashTimer);
+    undo.style.display = 'none';
+    var ref = db.ref('nvs/tasks').push();
+    ref.set({
+      text: t.text, created: t.created, due: t.due, done: t.done, doneAt: t.doneAt,
+      by: t.by, at: firebase.database.ServerValue.TIMESTAMP
+    }).catch(function (e) { setStat('restore failed: ' + (e && e.message)); });
+    cursor = ref.key;
   }
 
   function renderTasks() {
@@ -255,7 +280,7 @@
       var ck = document.createElement('span');
       ck.className = 'ck';
       ck.textContent = t.done ? '☑' : '☐';
-      ck.title = t.done ? 'reopen' : 'mark done — asks for the next step';
+      ck.title = t.done ? 'reopen (x)' : 'mark done (x)';
       onTap(ck, function () { cursor = id; toggle(id); });
       row.appendChild(ck);
 
@@ -280,11 +305,12 @@
       };
       row.appendChild(tx);
 
-      if (!t.done && t.created && t.created !== day) {
+      // an open task always carries the date it was raised, so its age is visible
+      if (!t.done && t.created) {
         var org = document.createElement('span');
-        org.className = 'org';
+        org.className = 'org' + (t.created === day ? ' new' : '');
         org.textContent = '(' + jp(t.created) + ')';
-        org.title = 'carried over from ' + jp(t.created);
+        org.title = t.created === day ? 'raised today' : 'open since ' + jp(t.created);
         row.appendChild(org);
       }
       if (!t.done) {
@@ -295,41 +321,15 @@
         onTap(gb, function () { upTask(id, { due: shiftDay(day, 1) }); });
         row.appendChild(gb);
       }
-      list.appendChild(row);
 
-      if (t.done && t.next) {
-        var nx = document.createElement('div');
-        nx.className = 'nx';
-        nx.innerHTML = '<span>↳</span><span>' + inline(t.next, false) + '</span>';
-        list.appendChild(nx);
-      }
-      if (pendingDone === id) {
-        var box = document.createElement('div');
-        box.className = 'nxin';
-        box.innerHTML = '<span>↳</span>';
-        var inp = document.createElement('input');
-        inp.placeholder = 'next step (required) — Enter to finish, Esc to cancel';
-        box.appendChild(inp);
-        list.appendChild(box);
-        inp.placeholder = 'next step — Enter to add it, Esc to just finish';
-        inp.onkeydown = function (e) {
-          if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-            e.preventDefault(); e.stopPropagation(); go(e.key === 'ArrowLeft' ? -1 : 1); return;
-          }
-          e.stopPropagation();
-          if (e.key === 'Enter') {
-            var v = inp.value.trim();
-            if (!v) { finish(id, ''); return; }
-            finish(id, v);
-            addTask(v, day);                 // the next step becomes a fresh open task
-          } else if (e.key === 'Escape') {
-            // nothing typed -> just finish the task; something typed -> abandon
-            if (!inp.value.trim()) finish(id, '');
-            else { pendingDone = null; renderTasks(); }
-          }
-        };
-        setTimeout(function () { inp.focus(); }, 0);
-      }
+      var rm = document.createElement('span');
+      rm.className = 'rm';
+      rm.textContent = '×';
+      rm.title = 'delete this task';
+      onTap(rm, function () { removeTask(id); });
+      row.appendChild(rm);
+
+      list.appendChild(row);
     });
   }
 
@@ -601,6 +601,8 @@
     today: function () { go(0, today()); },
     move: function (n) { moveCursor(n); },
     toggle: function () { toggle(); },
+    remove: function () { removeTask(); },
+    undelete: undelete,
     day: function () { return day; },
     editing: function () { return document.activeElement === ed; }
   };

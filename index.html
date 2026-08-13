@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260814-del -->
+<!-- build-20260814-ime -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -448,24 +448,18 @@ function applyFont(){
 })();
 
 // ---- keyboard ----------------------------------------------------------
-//   shift+←/→   walk the calendar  (works even while typing in the memo)
-//   ←/→         walk the calendar  (outside text fields)
+// Nothing here fires while a text field (or the memo) has focus — the IME must
+// own every keystroke there, so all shortcuts are for the main screen only.
+//   ←/→         walk the calendar
 //   alt+←/→     scroll the sheet sideways
 //   ↑/↓ PgUp/PgDn Home/End   scroll the sheet
 //   j / k       move the task highlight,  x  toggles it done
-//   d / #       delete the highlighted task (undo chip appears for 15s)
+//   d / #       delete the highlighted task (undo chip appears for 15s), u undoes
 //   t           jump to today,  [ / ]  switch companies
 document.addEventListener('keydown', e => {
   const t = e.target;
-  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-
-  // day navigation is the one binding that survives a focused text field
-  if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey &&
-      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-    if (window.nvsMemo) { window.nvsMemo.go(e.key === 'ArrowLeft' ? -1 : 1); e.preventDefault(); }
-    return;
-  }
-  if (typing) return;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (e.isComposing || e.keyCode === 229) return;      // mid-IME conversion
   if (e.ctrlKey || e.metaKey) return;
   const card = $('card');
   if (!card) return;

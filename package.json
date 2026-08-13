@@ -1,0 +1,7 @@
+{
+  "name": "nvs-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nikkei ValueSearch dashboard (Google SSO, missionvalue.com only)",
+  "scripts": { "start": "node server.js" }
+}

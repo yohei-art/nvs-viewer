@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-sync -->
+<!-- build-20260813-md -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -29,6 +29,7 @@
     --lcd2:#99a18b;  /* LCD shadow      */
     --ink:#26291f;   /* pixel ink       */
     --ink2:#555e49;  /* dim ink         */
+    --memow:300px;   /* memo pane width */
   }
   *{box-sizing:border-box}
   ::selection{background:var(--ink);color:var(--lcd)}
@@ -75,8 +76,9 @@
   #fontBox select:hover{border-color:var(--lcd)}
   #fontBox .bl{display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:bold}
   #fontBox .bl input{accent-color:var(--lcd);margin:0;cursor:pointer}
-  main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
-  .card{background:var(--lcd);border:1px solid var(--ink);border-radius:0;
+  main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
+       display:flex;align-items:stretch}
+  .card{flex:1 1 auto;min-width:0;background:var(--lcd);border:1px solid var(--ink);border-radius:0;
         overflow:auto;-webkit-overflow-scrolling:touch;outline:none;
         max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
   .card::-webkit-scrollbar{width:12px;height:12px}
@@ -98,17 +100,35 @@
   td.num{color:var(--ink)}
   tr:hover td{background:var(--lcd2)}
   #empty{padding:60px;text-align:center;color:var(--ink2)}
-  /* ---- MEMO: MemoExpress-style shared notepad (persisted at nvs/memo) ---- */
-  #memoWrap{margin-top:8px;border:1px solid var(--ink)}
+  /* ---- MEMO: MemoExpress-style shared notepad, split pane on the right ---- */
+  #split{width:7px;flex:none;cursor:col-resize;background:var(--lcd2);border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+  #split:hover,#split.on{background:var(--ink2)}
+  #memoWrap{flex:none;width:var(--memow);min-width:140px;display:flex;flex-direction:column;
+            border:1px solid var(--ink);max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
   #memoBar{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--lcd);
-           padding:1px 8px}
+           padding:1px 8px;flex:none}
   #memoBar .mtitle{font-weight:bold}
   #memoStat{margin-left:auto;color:var(--lcd2)}
-  #memo{display:block;width:100%;min-height:110px;border:0;outline:none;resize:vertical;
+  #memo{display:block;flex:1 1 auto;width:100%;min-height:0;border:0;outline:none;resize:none;
         background:var(--lcd);color:var(--ink);padding:4px 8px;
         font-family:var(--sheet);font-size:var(--fs);line-height:1.35;letter-spacing:0;
-        -webkit-font-smoothing:none}
+        -webkit-font-smoothing:inherit}
   #memo::placeholder{color:var(--ink2)}
+  /* markdown view — same dot grid, Lotus chrome at all times */
+  #memoView{display:none;flex:1 1 auto;min-height:0;overflow:auto;padding:4px 8px;cursor:text}
+  #memoView .dim{color:var(--ink2)}
+  #memoView h1,#memoView h2,#memoView h3,#memoView h4{font-size:inherit;margin:4px 0 2px;
+    background:var(--ink);color:var(--lcd);padding:0 6px;font-weight:bold}
+  #memoView p{margin:2px 0}
+  #memoView ul,#memoView ol{margin:2px 0;padding-left:20px}
+  #memoView code{background:var(--ink);color:var(--lcd);padding:0 3px}
+  #memoView pre{background:var(--ink);color:var(--lcd);padding:4px 6px;margin:3px 0;overflow:auto}
+  #memoView pre code{padding:0}
+  #memoView hr{border:0;border-top:1px dashed var(--ink2);margin:6px 0}
+  #memoView blockquote{margin:2px 0;padding-left:8px;border-left:3px solid var(--ink2);color:var(--ink2)}
+  #memoView a{color:var(--ink);text-decoration:underline}
+  #memoView table{border-collapse:collapse;margin:3px 0}
+  #memoView th,#memoView td{border:1px solid var(--ink2);padding:0 6px;font-size:inherit}
   .reload{margin-left:8px;background:transparent;border:1px solid var(--ink2);color:var(--ink2);
           padding:0 8px;font-size:inherit}
   .reload:hover{color:var(--lcd);background:var(--ink);border-color:var(--ink)}
@@ -130,7 +150,10 @@
     #status{order:4;flex:1 1 100%}
     nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 10px 0}
     nav .tab{flex:0 0 auto;padding:4px 8px}
-    main{padding:2px 8px 12px}
+    main{padding:2px 8px 12px;flex-direction:column}
+    #split{display:none}
+    #memoWrap{width:auto;margin-top:8px;min-height:120px}
+    #memo{min-height:110px}
     .card{max-height:calc(100dvh - 165px)}
     th,td{padding:4px 10px}
     .meta{flex-wrap:wrap;gap:4px 12px;padding:6px 10px 2px}
@@ -181,13 +204,16 @@
 <nav id="tabs"></nav>
 <main>
   <div class="card" id="card"><div id="empty">Type a ticker above — data appears here the moment Excel answers.</div></div>
+  <div id="split" title="drag to resize"></div>
   <section id="memoWrap">
     <div id="memoBar"><span class="mtitle">MEMO</span><span id="memoStat"></span></div>
-    <textarea id="memo" spellcheck="false" placeholder="shared memo — saved to Firebase, everyone sees edits live"></textarea>
+    <textarea id="memo" spellcheck="false" placeholder="shared memo — markdown OK, saved to Firebase live"></textarea>
+    <div id="memoView" title="click to edit"></div>
   </section>
 </main>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -422,6 +448,33 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ---- split divider: drag to resize the memo pane (width synced via nvs/ui) ----
+(function(){
+  const sp = $('split');
+  if (!sp) return;
+  try { const w0 = localStorage.getItem('nvsMemoW'); if (w0) document.documentElement.style.setProperty('--memow', w0 + 'px'); } catch (e) {}
+  let drag = false;
+  function move(x){
+    const m = document.querySelector('main');
+    const r = m.getBoundingClientRect();
+    let w = Math.round(r.right - x - 14);
+    w = Math.max(140, Math.min(r.width - 220, w));
+    document.documentElement.style.setProperty('--memow', w + 'px');
+  }
+  sp.addEventListener('mousedown', e => { drag = true; sp.classList.add('on'); e.preventDefault(); });
+  window.addEventListener('mousemove', e => { if (drag) move(e.clientX); });
+  window.addEventListener('mouseup', () => {
+    if (!drag) return;
+    drag = false; sp.classList.remove('on');
+    const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300;
+    try { localStorage.setItem('nvsMemoW', String(w)); } catch (e) {}
+    pushUi();
+  });
+  sp.addEventListener('touchstart', e => { drag = true; sp.classList.add('on'); }, {passive:true});
+  window.addEventListener('touchmove', e => { if (drag && e.touches[0]) move(e.touches[0].clientX); }, {passive:true});
+  window.addEventListener('touchend', () => { if (drag){ drag = false; sp.classList.remove('on'); pushUi(); } });
+})();
+
 // ---- UI state synced via Firebase (nvs/ui): font, size, bold, closed tabs, active tab ----
 // every device loads the same screen; changes mirror live between open dashboards.
 let uiApplying = false;   // true while applying a remote snapshot (suppresses echo writes)
@@ -430,6 +483,7 @@ function pushUi(){
   const st = { font: $('fontSel').value, size: $('sizeSel').value,
                bold: $('boldChk').checked ? 1 : 0,
                hidden: [...hidden], active: active || null,
+               memow: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300,
                at: firebase.database.ServerValue.TIMESTAMP };
   db.ref('nvs/ui').set(st).catch(e => console.warn('ui save:', e && e.message));
 }
@@ -442,6 +496,10 @@ function initUiSync(){
       if (st.font && FONTS[st.font]) $('fontSel').value = st.font;
       if (st.size) $('sizeSel').value = String(st.size);
       $('boldChk').checked = !!st.bold;
+      if (st.memow) {
+        document.documentElement.style.setProperty('--memow', st.memow + 'px');
+        try { localStorage.setItem('nvsMemoW', String(st.memow)); } catch (e) {}
+      }
       applyFont();
       hidden = new Set(st.hidden || []);
       saveHidden();
@@ -456,9 +514,25 @@ let memoTimer = null;
 let memoTyping = 0;         // ts of the last local keystroke
 let memoLastSent = null;    // last text this client pushed (to label "saved" vs remote edits)
 function initMemo(email){
-  const ta = $('memo'), stat = $('memoStat');
+  const ta = $('memo'), stat = $('memoStat'), view = $('memoView');
   if (!ta) return;
   const me = String(email || '').split('@')[0];
+  let editing = false;
+  function renderMemo(){
+    const src = ta.value;
+    if (!src) { view.innerHTML = '<span class="dim">(empty — click to write; markdown OK)</span>'; return; }
+    try { view.innerHTML = window.marked ? marked.parse(src) : ''; }
+    catch (e) { view.textContent = src; }
+    if (!view.innerHTML) view.textContent = src;
+  }
+  function setMode(ed){
+    editing = ed;
+    ta.style.display = ed ? 'block' : 'none';
+    view.style.display = ed ? 'none' : 'block';
+    if (ed) ta.focus(); else renderMemo();
+  }
+  view.onclick = () => setMode(true);
+  ta.addEventListener('blur', () => setMode(false));
   db.ref('nvs/memo').on('value', snap => {
     const m = snap.val() || {};
     const text = m.text || '';
@@ -468,6 +542,7 @@ function initMemo(email){
         const s = ta.selectionStart, e2 = ta.selectionEnd;
         ta.value = text;
         if (document.activeElement === ta) { try { ta.setSelectionRange(s, e2); } catch (e) {} }
+        if (!editing) renderMemo();
       }
     }
     if (m.at) {
@@ -487,6 +562,7 @@ function initMemo(email){
         .catch(e => { stat.textContent = 'save failed: ' + ((e && e.message) || e); });
     }, 500);
   });
+  setMode(false);
 }
 
 function fmt(v){

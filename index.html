@@ -120,7 +120,7 @@ const $ = id => document.getElementById(id);
 function setStatus(cls, text){ $('dot').className = 'dot ' + cls; $('statusText').textContent = text; }
 
 const provider = new firebase.auth.GoogleAuthProvider();
-provider.setCustomParameters({ hd: ALLOWED_DOMAIN, prompt: 'select_account' });
+provider.setCustomParameters({ hd: ALLOWED_DOMAIN });  // no forced re-auth: reuse the trusted browser session
 
 function show(view){ // 'gate' or 'app'
   $('gate').style.display = view === 'gate' ? 'flex' : 'none';

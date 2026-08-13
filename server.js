@@ -3,7 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const port = process.env.PORT || 3000;
-const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.png':'image/png', '.ico':'image/x-icon' };
+const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.png':'image/png', '.ico':'image/x-icon', '.md':'text/plain; charset=utf-8', '.json':'application/json; charset=utf-8' };
 
 // ---------------------------------------------------------------------------
 // /api/ticker — what the bottom banner scrolls.
@@ -17,7 +17,7 @@ const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.c
 // ---------------------------------------------------------------------------
 const UA = 'Mozilla/5.0 (compatible; NVS-viewer/1.0; +https://nvs-viewer-production.up.railway.app)';
 const FX_TTL   = 30 * 60 * 1000;      // ECB publishes once a day; half an hour is plenty
-const NEWS_TTL =  5 * 60 * 1000;
+const NEWS_TTL =  3 * 60 * 1000;      // headlines move, so re-read the feeds often
 let fxCache = { at: 0, data: null };
 let newsCache = { at: 0, data: null };
 

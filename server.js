@@ -13,6 +13,7 @@ const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.c
 // ---------------------------------------------------------------------------
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
 let cache = { at: 0, body: null };
+let lastGood = {};                       // label -> last quote that came back
 const CACHE_MS = 60 * 1000;
 
 function get(url, ms) {
@@ -51,6 +52,35 @@ async function yahoo(symbol, label) {
   } catch (e) { return null; }
 }
 
+// Yahoo Finance Japan's own pages. Railway can reach these (it cannot reach
+// query1.finance.yahoo.com), and they carry the change and % already worked out.
+const jpnum = s => parseFloat(String(s).replace(/,/g, ''));
+
+// index pages: "price":"68,308.59","savePrice":"…","changePrice":"784.53","changePriceRate":"1.16"
+async function yjIndex(code, label) {
+  const h = await get('https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code), 7000);
+  if (!h) return null;
+  const m = /"price":"([\d,.\-]+)","savePrice":"[^"]*","changePrice":"(-?[\d,.]+)","changePriceRate":"(-?[\d,.]+)"/.exec(h);
+  if (!m) return null;
+  const last = jpnum(m[1]);
+  if (!isFinite(last)) return null;
+  return { sym: label, last: last, chg: jpnum(m[2]), pct: jpnum(m[3]) };
+}
+
+// fx pages keep the same numbers inside an escaped JSON blob
+async function yjFx(code, label) {
+  const h = await get('https://finance.yahoo.co.jp/quote/' + encodeURIComponent(code), 7000);
+  if (!h) return null;
+  const bid = /\\"bid\\":\{\\"value\\":\\"([\d,.]+)\\"\}/.exec(h);
+  if (!bid) return null;
+  const chg = /\\"change\\":\{\\"value\\":\\"(-?[\d,.]+)\\"\}/.exec(h);
+  const last = jpnum(bid[1]);
+  if (!isFinite(last)) return null;
+  const c = chg ? jpnum(chg[1]) : null;
+  return { sym: label, last: last, chg: c,
+           pct: (c !== null && last - c) ? (c / (last - c)) * 100 : null };
+}
+
 // Stooq daily CSV: Symbol,Date,Time,Open,High,Low,Close,Volume
 async function stooq(symbol, label) {
   const raw = await get('https://stooq.com/q/l/?s=' + encodeURIComponent(symbol) +
@@ -65,22 +95,30 @@ async function stooq(symbol, label) {
            pct: isFinite(open) && open ? ((close - open) / open) * 100 : null };
 }
 
-// Yahoo answers reliably for all of these; TOPIX itself has no usable index
-// symbol there, so the 1306 ETF stands in for it (same direction, same %).
+// Each line tries Yahoo Japan first, then the US API, then stooq — whichever
+// the host can actually reach. Anything that answers gets shown.
 async function quotes() {
   const want = [
-    { label: 'USD/JPY', y: 'JPY=X',    s: 'usdjpy' },
-    { label: 'NKY',     y: '^N225',    s: '^nkx' },
-    { label: 'TOPIX',   y: '1306.T',   s: '^tpx' },
-    { label: 'EUR/JPY', y: 'EURJPY=X', s: 'eurjpy' },
-    { label: 'S&P500',  y: '^GSPC',    s: '^spx' },
-    { label: 'US10Y',   y: '^TNX',     s: null },
-    { label: 'VIX',     y: '^VIX',     s: null }
+    { label: 'USD/JPY', jf: 'USDJPY=FX', y: 'JPY=X',    s: 'usdjpy' },
+    { label: 'NKY',     ji: '998407.O',  y: '^N225',    s: '^nkx' },
+    { label: 'TOPIX',   ji: '998405.T',  y: '1306.T',   s: '^tpx' },
+    { label: 'EUR/JPY', jf: 'EURJPY=FX', y: 'EURJPY=X', s: 'eurjpy' },
+    { label: 'S&P500',  ji: '^GSPC',     y: '^GSPC',    s: '^spx' },
+    { label: 'US10Y',                    y: '^TNX',     s: null }
   ];
   const out = await Promise.all(want.map(async w => {
+    if (w.ji) { const r = await yjIndex(w.ji, w.label); if (r) return r; }
+    if (w.jf) { const r = await yjFx(w.jf, w.label);    if (r) return r; }
     return (await yahoo(w.y, w.label)) || (w.s ? await stooq(w.s, w.label) : null) || null;
   }));
-  const list = out.filter(Boolean);
+  // Providers block and unblock at random, so hold on to the last good print for
+  // each line; a blip then shows a slightly stale number instead of nothing.
+  out.forEach((q, i) => { if (q) lastGood[want[i].label] = { q: q, at: Date.now() }; });
+  const list = out.map((q, i) => {
+    if (q) return q;
+    const keep = lastGood[want[i].label];
+    return (keep && Date.now() - keep.at < 6 * 3600 * 1000) ? keep.q : null;
+  }).filter(Boolean);
   // last resort for the FX rate so the banner is never completely empty
   if (!list.some(q => q.sym === 'USD/JPY')) {
     const raw = await get('https://open.er-api.com/v6/latest/USD', 5000);

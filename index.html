@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260813-fix -->
+<!-- build-20260813-cal -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -39,6 +39,7 @@
   body{margin:0;background:var(--lcd);color:var(--ink);
        font-family:var(--sheet);font-size:var(--fs);line-height:1.3;
        letter-spacing:0;-webkit-font-smoothing:none;font-synthesis:none}
+  /* system (outline) fonts read better antialiased; bitmap fonts stay aliased */
   body.smooth{-webkit-font-smoothing:antialiased}
   /* top bar = Lotus inverse status line */
   header{display:flex;align-items:center;gap:14px;padding:6px 14px;
@@ -76,6 +77,10 @@
   #fontBox select:hover{border-color:var(--lcd)}
   #fontBox .bl{display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:bold}
   #fontBox .bl input{accent-color:var(--lcd);margin:0;cursor:pointer}
+  #fontBox input[type=color]{width:22px;height:15px;padding:0;border:1px solid var(--lcd2);
+                             background:var(--ink);border-radius:0;cursor:pointer}
+  #fontBox .rst{cursor:pointer;color:var(--lcd2);text-decoration:underline dotted}
+  #fontBox .rst:hover{color:var(--lcd)}
   main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
        display:flex;align-items:stretch}
   .card{flex:1 1 auto;min-width:0;background:var(--lcd);border:1px solid var(--ink);border-radius:0;
@@ -111,30 +116,7 @@
   body.dragging{cursor:col-resize;user-select:none;-webkit-user-select:none}
   #memoWrap{flex:none;width:var(--memow);min-width:140px;display:flex;flex-direction:column;
             border:1px solid var(--ink);max-height:calc(100vh - 128px);max-height:calc(100dvh - 128px)}
-  #memoBar{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--lcd);
-           padding:1px 8px;flex:none}
-  #memoBar .mtitle{font-weight:bold}
-  #memoStat{margin-left:auto;color:var(--lcd2)}
-  #memo{display:block;flex:1 1 auto;width:100%;min-height:0;border:0;outline:none;resize:none;
-        background:var(--lcd);color:var(--ink);padding:4px 8px;
-        font-family:var(--sheet);font-size:var(--fs);line-height:1.35;letter-spacing:0;
-        -webkit-font-smoothing:inherit}
-  #memo::placeholder{color:var(--ink2)}
-  /* markdown view — same dot grid, Lotus chrome at all times */
-  #memoView{display:none;flex:1 1 auto;min-height:0;overflow:auto;padding:4px 8px;cursor:text}
-  #memoView .dim{color:var(--ink2)}
-  #memoView h1,#memoView h2,#memoView h3,#memoView h4{font-size:inherit;margin:4px 0 2px;
-    background:var(--ink);color:var(--lcd);padding:0 6px;font-weight:bold}
-  #memoView p{margin:2px 0}
-  #memoView ul,#memoView ol{margin:2px 0;padding-left:20px}
-  #memoView code{background:var(--ink);color:var(--lcd);padding:0 3px}
-  #memoView pre{background:var(--ink);color:var(--lcd);padding:4px 6px;margin:3px 0;overflow:auto}
-  #memoView pre code{padding:0}
-  #memoView hr{border:0;border-top:1px dashed var(--ink2);margin:6px 0}
-  #memoView blockquote{margin:2px 0;padding-left:8px;border-left:3px solid var(--ink2);color:var(--ink2)}
-  #memoView a{color:var(--ink);text-decoration:underline}
-  #memoView table{border-collapse:collapse;margin:3px 0}
-  #memoView th,#memoView td{border:1px solid var(--ink2);padding:0 6px;font-size:inherit}
+  /* the memo pane's own chrome lives in memo.js (injected <style>) */
   .reload{margin-left:8px;background:transparent;border:1px solid var(--ink2);color:var(--ink2);
           padding:0 8px;font-size:inherit}
   .reload:hover{color:var(--lcd);background:var(--ink);border-color:var(--ink)}
@@ -158,8 +140,7 @@
     nav .tab{flex:0 0 auto;padding:4px 8px}
     main{padding:2px 8px 12px;flex-direction:column}
     #split{display:none}
-    #memoWrap{width:auto;margin-top:8px;min-height:120px}
-    #memo{min-height:110px}
+    #memoWrap{width:auto;margin-top:8px;min-height:210px;max-height:none}
     .card{max-height:calc(100dvh - 165px)}
     th,td{padding:4px 10px}
     .meta{flex-wrap:wrap;gap:4px 12px;padding:6px 10px 2px}
@@ -203,6 +184,8 @@
       <option>28</option><option>32</option><option>36</option><option>48</option>
     </select>
     <label class="bl" for="boldChk"><input type="checkbox" id="boldChk">B</label>
+    <input type="color" id="bgSel" value="#a9b09b" title="screen colour — the rest of the palette follows">
+    <span class="rst" id="bgRst" title="back to the 200LX LCD">rst</span>
   </div>
   <div id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
   <div id="userbox"><span id="who"></span><button id="signout" class="reload">Sign out</button></div>
@@ -211,18 +194,14 @@
 <main>
   <div class="card" id="card"><div id="empty">Type a ticker above — data appears here the moment Excel answers.</div></div>
   <div id="split" title="drag to resize"></div>
-  <section id="memoWrap">
-    <div id="memoBar"><span class="mtitle">MEMO</span><span id="memoStat"></span></div>
-    <textarea id="memo" spellcheck="false" placeholder="shared memo — markdown OK, saved to Firebase live"></textarea>
-    <div id="memoView" title="click to edit"></div>
-  </section>
+  <section id="memoWrap"></section>
 </main>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="memo.js"></script>
 <script>
 // ==================== PASTE YOUR FIREBASE CONFIG ====================
 // Firebase console > Project settings > General > Your apps > Web app
@@ -293,6 +272,7 @@ auth.onAuthStateChanged(user => {
   wired = true;
 
   loadDbFont('JFDotElisa8', 'elisa8');          // \u6075\u68a8\u6c99 8-dot (HP200LX)
+
   loadDbFont('JFDotShinonome12', 'shinonome12'); // \u6771\u96f2 12-dot
 
   initMemo(email);
@@ -393,6 +373,33 @@ function loadDbFont(family, key){
     return f.load().then(() => document.fonts.add(f));
   }).catch(e => console.warn('font ' + key + ':', e && e.message));
 }
+// ---- screen colour: pick the LCD background, the rest of the palette follows it ----
+const LCD0 = '#a9b09b';
+function rgb(hex){ const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function hex6(a){ return '#' + ((1 << 24) + (a[0] << 16) + (a[1] << 8) + a[2]).toString(16).slice(1); }
+function dark(hex, k){ return hex6(rgb(hex).map(v => Math.round(v * k))); }          // toward black
+function light(hex, k){ return hex6(rgb(hex).map(v => Math.round(v + (255 - v) * k))); } // toward white
+function lum(hex){ const c = rgb(hex); return (0.299*c[0] + 0.587*c[1] + 0.114*c[2]) / 255; }
+
+function applyBg(hex, push){
+  if (!/^#[0-9a-f]{6}$/i.test(hex || '')) hex = LCD0;
+  const s = document.documentElement.style;
+  s.setProperty('--lcd', hex);
+  if (lum(hex) > 0.42) {                  // light screen, dark ink — the 200LX LCD
+    s.setProperty('--lcd2', dark(hex, 0.90));
+    s.setProperty('--ink',  dark(hex, 0.22));
+    s.setProperty('--ink2', dark(hex, 0.52));
+  } else {                                // dark screen, glowing ink — terminal style
+    s.setProperty('--lcd2', light(hex, 0.12));
+    s.setProperty('--ink',  light(hex, 0.86));
+    s.setProperty('--ink2', light(hex, 0.52));
+  }
+  $('bgSel').value = hex;
+  try { localStorage.setItem('nvsBg', hex); } catch (e) {}
+  if (push !== false) pushUi();
+}
+
 function applyFont(){
   const f = FONTS[$('fontSel').value] || FONTS['mp12'];
   const size = parseInt($('sizeSel').value, 10) || 12;
@@ -432,12 +439,19 @@ function applyFont(){
   $('sizeSel').onchange = applyFont;
   $('boldChk').onchange = applyFont;
   applyFont();
+  let bg = LCD0;
+  try { bg = localStorage.getItem('nvsBg') || LCD0; } catch (e) {}
+  applyBg(bg, false);
+  $('bgSel').oninput  = () => applyBg($('bgSel').value, false);   // live while dragging
+  $('bgSel').onchange = () => applyBg($('bgSel').value, true);    // save when committed
+  $('bgRst').onclick  = () => applyBg(LCD0, true);
 })();
 
-// ---- keyboard: scroll the sheet like a 1-2-3 grid; [ and ] switch companies ----
+// ---- keyboard: ←/→ walk the memo's calendar, shift+←/→ scroll the sheet sideways,
+//      ↑/↓/PgUp/PgDn scroll the grid, [ and ] switch companies ----
 document.addEventListener('keydown', e => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const card = $('card');
   if (!card) return;
@@ -446,8 +460,14 @@ document.addEventListener('keydown', e => {
   switch (e.key) {
     case 'ArrowUp':    card.scrollBy(0, -step); e.preventDefault(); break;
     case 'ArrowDown':  card.scrollBy(0,  step); e.preventDefault(); break;
-    case 'ArrowLeft':  card.scrollBy(-140, 0);  e.preventDefault(); break;
-    case 'ArrowRight': card.scrollBy( 140, 0);  e.preventDefault(); break;
+    case 'ArrowLeft':
+      if (e.shiftKey) card.scrollBy(-140, 0);
+      else if (window.nvsMemo) window.nvsMemo.go(-1);
+      e.preventDefault(); break;
+    case 'ArrowRight':
+      if (e.shiftKey) card.scrollBy(140, 0);
+      else if (window.nvsMemo) window.nvsMemo.go(1);
+      e.preventDefault(); break;
     case 'PageUp':     card.scrollBy(0, -page); e.preventDefault(); break;
     case 'PageDown':   card.scrollBy(0,  page); e.preventDefault(); break;
     case 'Home':       card.scrollTo({top:0, left:0}); e.preventDefault(); break;
@@ -503,6 +523,7 @@ function pushUiNow(){
                bold: $('boldChk').checked ? 1 : 0,
                hidden: [...hidden], active: active || null,
                memow: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300,
+               bg: $('bgSel').value,
                at: firebase.database.ServerValue.TIMESTAMP };
   db.ref('nvs/ui').set(st).catch(e => console.warn('ui save:', e && e.message));
 }
@@ -520,6 +541,7 @@ function initUiSync(){
         try { localStorage.setItem('nvsMemoW', String(st.memow)); } catch (e) {}
       }
       applyFont();
+      if (st.bg) applyBg(st.bg, false);
       hidden = new Set(st.hidden || []);
       saveHidden();
       if ('active' in st && st.active !== active) { active = st.active || null; }
@@ -528,62 +550,7 @@ function initUiSync(){
   });
 }
 
-// ---- MEMO: shared notepad at nvs/memo — realtime, last-write-wins like a tiny shared doc ----
-let memoTimer = null;
-let memoTyping = 0;         // ts of the last local keystroke
-let memoLastSent = null;    // last text this client pushed (to label "saved" vs remote edits)
-function initMemo(email){
-  const ta = $('memo'), stat = $('memoStat'), view = $('memoView');
-  if (!ta) return;
-  const me = String(email || '').split('@')[0];
-  let editing = false;
-  function renderMemo(){
-    const src = ta.value;
-    if (!src) { view.innerHTML = '<span class="dim">(empty — click to write; markdown OK)</span>'; return; }
-    try { view.innerHTML = window.marked ? marked.parse(src) : ''; }
-    catch (e) { view.textContent = src; }
-    if (!view.innerHTML) view.textContent = src;
-  }
-  function setMode(ed){
-    editing = ed;
-    ta.style.display = ed ? 'block' : 'none';
-    view.style.display = ed ? 'none' : 'block';
-    if (ed) ta.focus(); else renderMemo();
-  }
-  view.onclick = () => setMode(true);
-  ta.addEventListener('blur', () => setMode(false));
-  db.ref('nvs/memo').on('value', snap => {
-    const m = snap.val() || {};
-    const text = m.text || '';
-    if (text !== ta.value) {
-      // apply remote edits unless this user typed within the last 1.2s (their write is in flight)
-      if (document.activeElement !== ta || Date.now() - memoTyping > 1200) {
-        const s = ta.selectionStart, e2 = ta.selectionEnd;
-        ta.value = text;
-        if (document.activeElement === ta) { try { ta.setSelectionRange(s, e2); } catch (e) {} }
-        if (!editing) renderMemo();
-      }
-    }
-    if (m.at) {
-      const when = new Date(m.at).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
-      stat.textContent = (m.by === me && text === memoLastSent)
-        ? 'saved ' + when
-        : (m.by ? m.by + ' · ' + when : when);
-    }
-  });
-  ta.addEventListener('input', () => {
-    memoTyping = Date.now();
-    stat.textContent = '…';
-    clearTimeout(memoTimer);
-    memoTimer = setTimeout(() => {
-      memoLastSent = ta.value;
-      db.ref('nvs/memo').set({ text: ta.value, by: me, at: firebase.database.ServerValue.TIMESTAMP })
-        .catch(e => { stat.textContent = 'save failed: ' + ((e && e.message) || e); });
-    }, 500);
-  });
-  setMode(false);
-}
-
+// ---- MEMO: the daily checklist + notes pane lives in memo.js ----
 function fmt(v){
   if (typeof v === 'number') {
     return v.toLocaleString('ja-JP', { maximumFractionDigits: 3 });

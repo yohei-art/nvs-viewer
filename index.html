@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260814-mvp -->
+<!-- build-20260814-set -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -48,18 +48,22 @@
          background:var(--ink);color:var(--lcd);flex-wrap:wrap}
   header h1{font-size:inherit;margin:0;font-weight:bold}
   #tickerBox{display:flex;gap:8px;align-items:center}
-  #ticker{width:90px;padding:2px 8px;border:0;border-radius:0;
-          background:var(--lcd);color:var(--ink);font:inherit;outline:none;text-transform:uppercase}
+  /* no text-transform: the box takes Japanese too — uppercasing happens on send */
+  #ticker{width:110px;padding:2px 8px;border:0;border-radius:0;
+          background:var(--lcd);color:var(--ink);font:inherit;outline:none}
   #ticker::placeholder{color:var(--ink2)}
   button{padding:2px 10px;border:0;border-radius:0;background:var(--lcd);color:var(--ink);
          font:inherit;cursor:pointer}
   button:hover{background:var(--lcd2)}
   button:disabled{background:var(--ink2);color:var(--lcd);cursor:default}
-  #status{color:var(--lcd);display:flex;align-items:center;gap:8px;font:inherit}
-  .dot{width:8px;height:8px;border-radius:0;background:var(--lcd2);flex:none}
-  .dot.loading{background:var(--lcd);animation:pulse .8s steps(2,end) infinite}
-  .dot.done{background:var(--lcd)} .dot.error{background:var(--lcd);animation:pulse .4s steps(2,end) infinite} .dot.notfound{background:var(--lcd2)}
-  @keyframes pulse{50%{opacity:.15}}
+  #status{color:var(--lcd);display:flex;align-items:center;gap:9px;font:inherit;min-height:16px}
+  #status.gone{opacity:0;transition:opacity .5s steps(4,end)}
+  /* 8-bit sprite: a 2px block whose box-shadow paints the other pixels */
+  .dot{width:2px;height:2px;flex:none;background:transparent;border-radius:0;
+       margin-right:16px;transform:translateY(-5px)}
+  .dot.busy{animation:pulse .7s steps(2,end) infinite}
+  .dot.error{animation:pulse .45s steps(2,end) infinite}
+  @keyframes pulse{50%{opacity:.2}}
   #userbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:inherit;color:var(--lcd2)}
   /* tabs = plain text, active is inverse video */
   nav{display:flex;gap:2px;padding:4px 14px 0;flex-wrap:wrap}
@@ -72,16 +76,25 @@
   nav .restore{padding:1px 8px;border:0;color:var(--ink2);cursor:pointer;font-size:inherit;
                user-select:none;background:transparent;text-decoration:underline dotted}
   nav .restore:hover{color:var(--ink)}
-  #fontBox{display:flex;gap:5px;align-items:center;font-size:inherit;color:var(--lcd2)}
-  #fontBox select{background:var(--ink);color:var(--lcd);border:1px solid var(--lcd2);
-                  font:inherit;padding:1px 3px;border-radius:0;outline:none;cursor:pointer}
-  #fontBox select:hover{border-color:var(--lcd)}
-  #fontBox .bl{display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:bold}
-  #fontBox .bl input{accent-color:var(--lcd);margin:0;cursor:pointer}
-  #fontBox input[type=color]{width:22px;height:15px;padding:0;border:1px solid var(--lcd2);
-                             background:var(--ink);border-radius:0;cursor:pointer}
-  #fontBox .rst{cursor:pointer;color:var(--lcd2);text-decoration:underline dotted}
-  #fontBox .rst:hover{color:var(--lcd)}
+  /* settings live behind one button so the status line stays clean */
+  #setBox{position:relative}
+  #setBtn{background:transparent;border:1px solid var(--lcd2);color:var(--lcd);padding:0 8px}
+  #setBtn:hover,#setBtn.on{background:var(--lcd);color:var(--ink)}
+  #setPanel{position:absolute;top:calc(100% + 5px);left:0;z-index:200;
+            background:var(--lcd);color:var(--ink);border:1px solid var(--ink);
+            padding:6px 8px;display:grid;grid-template-columns:auto auto;gap:4px 10px;
+            align-items:center;white-space:nowrap}
+  #setPanel[hidden]{display:none}
+  #setPanel label{color:var(--ink2)}
+  #setPanel select{background:var(--lcd);color:var(--ink);border:1px solid var(--ink2);
+                   font:inherit;padding:1px 3px;border-radius:0;outline:none;cursor:pointer}
+  #setPanel select:hover{border-color:var(--ink)}
+  #setPanel input[type=checkbox]{accent-color:var(--ink);margin:0;cursor:pointer}
+  #setPanel input[type=color]{width:26px;height:15px;padding:0;border:1px solid var(--ink2);
+                              background:var(--lcd);border-radius:0;cursor:pointer;vertical-align:-2px}
+  #setPanel a{color:var(--ink)}
+  #setPanel .rst{cursor:pointer;color:var(--ink2);text-decoration:underline dotted;margin-left:6px}
+  #setPanel .rst:hover{color:var(--ink)}
   main{padding:2px 14px 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
        display:flex;align-items:stretch}
   .card{flex:1 1 auto;min-width:0;background:var(--lcd);border:1px solid var(--ink);border-radius:0;
@@ -93,17 +106,23 @@
   .meta{display:flex;gap:14px;align-items:baseline;padding:4px 10px 2px;color:var(--ink2)}
   .meta b{color:var(--ink);font-weight:bold}
   table{border-collapse:collapse;width:100%;font-family:var(--sheet);letter-spacing:0}
-  th,td{padding:1px 8px;border:0;white-space:nowrap;font-size:var(--fs);line-height:1.3}
+  table.fixed{table-layout:fixed;width:auto;min-width:100%}
+  th,td{padding:1px 8px;border:0;white-space:nowrap;font-size:var(--fs);line-height:1.3;
+        overflow:hidden;text-overflow:ellipsis}
   /* column header row = inverse video like Lotus */
   th{position:sticky;top:0;z-index:2;background:var(--ink);color:var(--lcd);
      text-align:right;font-weight:400}
   td:first-child,th:first-child{position:sticky;left:0}
   th:first-child{text-align:left;z-index:3}
   td{text-align:right}
+  td.txt{text-align:left}
   td:first-child{text-align:left;color:var(--ink);z-index:1;background:var(--lcd)}
-  td.field{color:var(--ink2);font-size:var(--fs);text-align:left;opacity:.7}
   th.fc{background:var(--ink2);color:var(--lcd)}
   td.num{color:var(--ink)}
+  /* drag the right edge of any header to set that column's width */
+  th .rz{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;
+         user-select:none;touch-action:none}
+  th .rz:hover{background:var(--lcd2)}
   tr:hover td{background:var(--lcd2)}
   #empty{padding:60px;text-align:center;color:var(--ink2)}
   /* ---- boot splash: pixel MVP over the LCD, gone in a second and a half ---- */
@@ -225,32 +244,43 @@
 
 <div id="app" style="display:none">
 <header>
-  <h1>NVS Dashboard</h1>
   <div id="tickerBox">
-    <input id="ticker" placeholder="enter ticker" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <input id="ticker" placeholder="enter ticker" autocomplete="off" autocapitalize="off"
+           autocorrect="off" spellcheck="false">
     <button id="go">Load</button>
   </div>
-  <div id="fontBox"><label for="fontSel">Font</label>
-    <select id="fontSel">
-      <option value="mp12">PixelM+ 12dot</option>
-      <option value="mp10">PixelM+ 10dot</option>
-      <option value="elisa">えりさ 8dot</option>
-      <option value="shino">東雲 12dot</option>
-      <option value="dot16">DotGothic 16</option>
-      <option value="sfmono">SF Mono</option>
-      <option value="menlo">Menlo</option>
-      <option value="monaco">Monaco</option>
-      <option value="courier">Courier New</option>
-      <option value="osaka">Osaka 等幅</option>
-    </select>
-    <select id="sizeSel">
-      <option>8</option><option>10</option><option>12</option><option>14</option>
-      <option>16</option><option>18</option><option>20</option><option>24</option>
-      <option>28</option><option>32</option><option>36</option><option>48</option>
-    </select>
-    <label class="bl" for="boldChk"><input type="checkbox" id="boldChk">B</label>
-    <input type="color" id="bgSel" value="#a9b09b" title="screen colour — the rest of the palette follows">
-    <span class="rst" id="bgRst" title="back to the 200LX LCD">rst</span>
+  <div id="setBox">
+    <button id="setBtn" title="display settings">set</button>
+    <div id="setPanel" hidden>
+      <label for="fontSel">font</label>
+      <select id="fontSel">
+        <option value="mp12">PixelM+ 12dot</option>
+        <option value="mp10">PixelM+ 10dot</option>
+        <option value="elisa">えりさ 8dot</option>
+        <option value="shino">東雲 12dot</option>
+        <option value="dot16">DotGothic 16</option>
+        <option value="sfmono">SF Mono</option>
+        <option value="menlo">Menlo</option>
+        <option value="monaco">Monaco</option>
+        <option value="courier">Courier New</option>
+        <option value="osaka">Osaka 等幅</option>
+      </select>
+      <label for="sizeSel">size</label>
+      <select id="sizeSel">
+        <option>8</option><option>10</option><option>12</option><option>14</option>
+        <option>16</option><option>18</option><option>20</option><option>24</option>
+        <option>28</option><option>32</option><option>36</option><option>48</option>
+      </select>
+      <label for="boldChk">bold</label>
+      <span><input type="checkbox" id="boldChk"></span>
+      <label for="bgSel">screen</label>
+      <span><input type="color" id="bgSel" value="#a9b09b">
+            <span class="rst" id="bgRst" title="back to the 200LX LCD">reset</span></span>
+      <label>widths</label>
+      <span><span class="rst" id="colRst" title="forget saved column widths">reset</span></span>
+      <label>log</label>
+      <span><a href="/DEVLOG.md" target="_blank" rel="noopener">dev log</a></span>
+    </div>
   </div>
   <div id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
   <div id="userbox"><span id="who"></span><span id="clock"></span><button id="signout" class="reload">Sign out</button></div>
@@ -301,7 +331,44 @@ let wired = false;    // data listeners attached only once, after sign-in
 var uiApplying = false;   // true while applying a remote snapshot (suppresses echo writes)
 
 const $ = id => document.getElementById(id);
-function setStatus(cls, text){ $('dot').className = 'dot ' + cls; $('statusText').textContent = text; }
+
+// ---- 8-bit status sprites, painted with box-shadow so they follow the palette ----
+const SPRITE = {
+  ok:   ['........','.......X','......XX','X....XX.','XX..XX..','.XXXX...','..XX....','........'],
+  busy: ['XXXXXXXX','.XXXXXX.','..XXXX..','...XX...','..XXXX..','.XXXXXX.','XXXXXXXX','........'],
+  ask:  ['..XXXX..','.XX..XX.','.....XX.','....XX..','...XX...','........','...XX...','........'],
+  err:  ['........','.XX..XX.','..XXXX..','...XX...','..XXXX..','.XX..XX.','........','........']
+};
+function paintSprite(el, name, px){
+  const bmp = SPRITE[name];
+  if (!bmp) { el.style.boxShadow = 'none'; el.style.marginRight = '0'; return; }
+  px = px || 2;
+  const out = [];
+  bmp.forEach((row, y) => row.split('').forEach((c, x) => {
+    if (c === 'X') out.push((x * px) + 'px ' + (y * px) + 'px 0 0 currentColor');
+  }));
+  el.style.width = px + 'px';
+  el.style.height = px + 'px';
+  el.style.boxShadow = out.join(',');
+  el.style.marginRight = (8 * px) + 'px';
+}
+let statusTimer = null;
+// `hold` keeps a message up (loading); everything else clears itself like a banner
+function setStatus(cls, text, hold){
+  const dot = $('dot'), box = $('status');
+  dot.className = 'dot ' + (cls || '');
+  paintSprite(dot, cls === 'busy' ? 'busy' : cls === 'ok' ? 'ok'
+                  : cls === 'ask' ? 'ask' : cls === 'err' ? 'err' : null);
+  $('statusText').textContent = text || '';
+  box.classList.remove('gone');
+  clearTimeout(statusTimer);
+  if (!hold && text) {
+    statusTimer = setTimeout(() => {
+      box.classList.add('gone');
+      setTimeout(() => { if (box.classList.contains('gone')) setStatus('', ''); }, 600);
+    }, 7000);
+  }
+}
 
 const provider = new firebase.auth.GoogleAuthProvider();
 provider.setCustomParameters({ hd: ALLOWED_DOMAIN });  // no forced re-auth: reuse the trusted browser session
@@ -333,7 +400,7 @@ auth.onAuthStateChanged(user => {
   // authorised
   show('app');
   $('who').textContent = email.split('@')[0];
-  setStatus('', 'connected');
+  setStatus('', '');
   if (wired) return;
   wired = true;
 
@@ -366,7 +433,7 @@ auth.onAuthStateChanged(user => {
     const stamp = [s.at || 0, s.code || '', s.state || ''].join('|');
     const isNew = statusSeen !== null && stamp !== statusSeen;
     statusSeen = stamp;
-    if (s.state === 'loading') setStatus('loading', '⏳ ' + s.code + ' — Excel is loading…');
+    if (s.state === 'loading') setStatus('busy', s.code + ' — Excel is loading…', true);
     else if (s.state === 'done') {
       // jump the view to the ticker that just finished loading
       if (isNew) {
@@ -375,11 +442,11 @@ auth.onAuthStateChanged(user => {
         else pendingFocus = s.code;         // data may arrive a beat later
       }
       const when = new Date(s.at || Date.now()).toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      setStatus('done', '✅ ' + (s.msg || s.code) + ' — updated ' + when);
+      setStatus('ok', (s.msg || s.code) + ' — updated ' + when);
     }
-    else if (s.state === 'notfound') setStatus('notfound', '❓ ' + s.code + ' — not a valid company code (unknown, delisted, or not a company)');
-    else if (s.state === 'timeout') setStatus('error', '⌛ ' + s.code + ' — 接続がタイムアウトされました (connection timed out) — try reloading');
-    else if (s.state === 'error') setStatus('error', '✖ ' + s.code + ': ' + (s.msg || 'failed'));
+    else if (s.state === 'notfound') setStatus('ask', s.code + ' — not a valid company code (unknown, delisted, or not a company)');
+    else if (s.state === 'timeout') setStatus('err', s.code + ' — 接続がタイムアウトされました (connection timed out) — try reloading');
+    else if (s.state === 'error') setStatus('err', s.code + ': ' + (s.msg || 'failed'));
   });
 });
 
@@ -400,22 +467,17 @@ function closeTab(code){
 }
 
 function request(code){
-  code = String(code||'').trim().toUpperCase();   // 429a -> 429A so lookups don't fail
+  // uppercase only here, on the way out: 429a -> 429A so lookups don't fail,
+  // while anything Japanese passes through untouched
+  code = String(code||'').trim().toUpperCase();
   if (!code) return;
   unhide(code);                                   // re-requesting a closed tab brings it back
   db.ref('nvs/request').set({ code: code, id: Date.now() });
-  setStatus('loading', '⏳ ' + code + ' — sent to the PC…');
+  setStatus('busy', code + ' — sent to the PC…', true);
 }
 
-// force uppercase live as the user types (keeps the caret in place)
-$('ticker').addEventListener('input', e => {
-  const up = e.target.value.toUpperCase();
-  if (up !== e.target.value) {
-    const p = e.target.selectionStart;
-    e.target.value = up;
-    e.target.setSelectionRange(p, p);
-  }
-});
+// The box is left exactly as typed — auto-capitalising it mangled Japanese
+// input. request() is the only place that uppercases, on the way to Excel.
 $('go').onclick = () => request($('ticker').value);
 $('ticker').addEventListener('keydown', e => { if (e.key === 'Enter') request($('ticker').value); });
 
@@ -505,6 +567,7 @@ function splashText(){
 // The feeds have no CORS headers, so server.js relays them at /api/ticker.
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escHtml(s){ return esc(s); }
 function fmtQ(v){
   if (v == null) return '';
   const d = Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 10 ? 2 : 3;
@@ -545,26 +608,49 @@ async function loadTicker(){
   });
 }
 
-// ---- header clock: JST alongside US Central, both to the second ----
-function hhmmss(tz){
+// ---- header clock: 02:34 (JST) 12:34 (CDT) ----
+function hhmm(tz){
   try {
     return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit',
-      minute: '2-digit', second: '2-digit', hour12: false }).format(new Date());
-  } catch (e) { return '--:--:--'; }
+      minute: '2-digit', hour12: false }).format(new Date());
+  } catch (e) { return '--:--'; }
+}
+// Chicago is CST in winter and CDT in summer — ask the browser which it is today
+function tzAbbr(tz, fallback){
+  try {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+      .formatToParts(new Date()).find(x => x.type === 'timeZoneName');
+    return (p && /^[A-Z]{2,5}$/.test(p.value)) ? p.value : fallback;
+  } catch (e) { return fallback; }
 }
 (function(){
   const el = $('clock');
   if (!el) return;
   const tick = () => {
-    el.innerHTML = '<b>JST</b> ' + hhmmss('Asia/Tokyo') +
-                   '　<b>CST</b> ' + hhmmss('America/Chicago');
+    el.textContent = hhmm('Asia/Tokyo') + ' (JST)　' +
+                     hhmm('America/Chicago') + ' (' + tzAbbr('America/Chicago', 'CST') + ')';
   };
   tick();
-  setInterval(tick, 1000);
+  setInterval(tick, 15000);          // minute resolution; no need to run every second
+})();
+
+// ---- settings popover ----
+(function(){
+  const btn = $('setBtn'), panel = $('setPanel');
+  if (!btn || !panel) return;
+  const close = () => { panel.hidden = true; btn.classList.remove('on'); };
+  btn.onclick = e => {
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    btn.classList.toggle('on', !panel.hidden);
+  };
+  panel.onclick = e => e.stopPropagation();
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 })();
 (function(){
   loadTicker();
-  setInterval(loadTicker, 90000);
+  setInterval(loadTicker, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadTicker(); });
 })();
 
@@ -641,6 +727,7 @@ function applyFont(){
   $('bgSel').oninput  = () => applyBg($('bgSel').value, false);   // live while dragging
   $('bgSel').onchange = () => applyBg($('bgSel').value, true);    // save when committed
   $('bgRst').onclick  = () => applyBg(LCD0, true);
+  $('colRst').onclick = () => { colW = []; saveColW(); render(); };
 })();
 
 // ---- keyboard ----------------------------------------------------------
@@ -738,6 +825,7 @@ function pushUiNow(){
                hidden: [...hidden], active: active || null,
                memow: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300,
                bg: $('bgSel').value,
+               colw: colW.map(w => w || 0),
                at: firebase.database.ServerValue.TIMESTAMP };
   db.ref('nvs/ui').set(st).catch(e => console.warn('ui save:', e && e.message));
 }
@@ -756,6 +844,10 @@ function initUiSync(){
       }
       applyFont();
       if (st.bg) applyBg(st.bg, false);
+      if (Array.isArray(st.colw)) {
+        colW = st.colw.map(w => w || 0);
+        try { localStorage.setItem('nvsColW', JSON.stringify(colW)); } catch (e) {}
+      }
       hidden = new Set(st.hidden || []);
       saveHidden();
       if ('active' in st && st.active !== active) { active = st.active || null; }
@@ -809,22 +901,69 @@ function render(){
   let h = '<div class="meta"><b>' + (d.company||'') + '</b><span>' + d.code + '</span>' +
           '<span>更新 ' + when + '</span>' +
           '<button class="reload" onclick="request(\'' + d.code + '\')">↻ reload</button></div>';
-  h += '<table><thead><tr>';
-  (d.heads||[]).forEach(x => {
-    const fc = /予/.test(String(x)) ? ' class="fc"' : '';
-    h += '<th' + fc + '>' + x + '</th>';
+  // A generic table: whatever heads/rows arrive get rendered. Nothing is assumed
+  // about what any column means — numbers right-align, text left-aligns.
+  const heads = d.heads || [];
+  h += '<table id="grid">' + colGroup(heads.length) + '<thead><tr>';
+  heads.forEach((x, i) => {
+    const fc = /予/.test(String(x)) ? ' fc' : '';
+    h += '<th class="c' + i + fc + '">' + escHtml(x) +
+         '<span class="rz" data-col="' + i + '" title="drag to resize"></span></th>';
   });
   h += '</tr></thead><tbody>';
-  (d.rows||[]).forEach(r => {
+  (d.rows || []).forEach(r => {
     h += '<tr>';
-    (r||[]).forEach((v,i) => {
-      const cls = i === 1 ? 'field' : (typeof v === 'number' ? 'num' : '');
-      h += '<td class="' + cls + '">' + fmt(v) + '</td>';
+    (r || []).forEach((v, i) => {
+      const cls = 'c' + i + (typeof v === 'number' ? ' num' : ' txt');
+      h += '<td class="' + cls + '">' + escHtml(fmt(v)) + '</td>';
     });
     h += '</tr>';
   });
   h += '</tbody></table>';
   card.innerHTML = h;
+  wireResize();
+}
+
+// ---- column widths: drag a header edge, and the size is remembered ----
+let colW = [];
+try { colW = JSON.parse(localStorage.getItem('nvsColW') || '[]') || []; } catch (e) {}
+function saveColW(){
+  try { localStorage.setItem('nvsColW', JSON.stringify(colW)); } catch (e) {}
+  pushUi();
+}
+function colGroup(n){
+  let g = '<colgroup>';
+  for (let i = 0; i < n; i++) g += colW[i] ? '<col style="width:' + colW[i] + 'px">' : '<col>';
+  return g + '</colgroup>';
+}
+function wireResize(){
+  const table = $('grid');
+  if (!table) return;
+  if (colW.some(w => w)) table.classList.add('fixed');
+  table.querySelectorAll('.rz').forEach(handle => {
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      const idx = +handle.dataset.col;
+      const th = handle.parentNode;
+      const startX = e.clientX, startW = th.getBoundingClientRect().width;
+      table.classList.add('fixed');
+      document.body.classList.add('dragging');
+      const move = ev => {
+        const w = Math.max(40, Math.round(startW + ev.clientX - startX));
+        colW[idx] = w;
+        const col = table.querySelectorAll('col')[idx];
+        if (col) col.style.width = w + 'px';
+      };
+      const up = () => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        document.body.classList.remove('dragging');
+        saveColW();
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+    });
+  });
 }
 </script>
 </body>

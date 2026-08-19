@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NVS Dashboard</title>
-<!-- build-20260814-set -->
+<!-- build-20260817-pane -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
   /* PixelMplus 10/12 - outline conversions of classic 10/12-dot bitmap gothic (M+ license).
@@ -167,6 +167,20 @@
          border-left:2px dotted var(--ink);border-right:2px dotted var(--ink)}
   #split:hover,#split.on{background:var(--ink2)}
   #split:hover::before,#split.on::before{border-color:var(--lcd)}
+  #split{position:relative}
+  #split .pbtn{position:absolute;left:0;width:100%;text-align:center;cursor:pointer;
+        color:var(--ink);font-size:12px;line-height:20px;user-select:none}
+  #split .pbtn:hover{background:var(--ink);color:var(--lcd)}
+  #minL{top:0} #minR{top:20px}
+  /* pane modes: comp = memo minimized, memo = company minimized */
+  html.pane-comp #memoWrap{display:none}
+  html.pane-comp #split{cursor:default}
+  html.pane-comp #split::before{display:none}
+  html.pane-comp #minL{top:0}
+  html.pane-memo #card{display:none}
+  html.pane-memo #split{cursor:default}
+  html.pane-memo #split::before{display:none}
+  html.pane-memo #memoWrap{flex:1 1 auto;width:auto}
   body.dragging{cursor:col-resize;user-select:none;-webkit-user-select:none}
   #memoWrap{flex:none;width:var(--memow);min-width:140px;display:flex;flex-direction:column;
             border:1px solid var(--ink);max-height:calc(100vh - 128px - var(--tick));max-height:calc(100dvh - 128px - var(--tick))}
@@ -195,6 +209,9 @@
     main{padding:2px 8px 12px;flex-direction:column}
     #split{display:none}
     #memoWrap{width:auto;margin-top:8px;min-height:210px;max-height:none}
+    html.pane-comp #memoWrap{display:flex}
+    html.pane-memo #card{display:block}
+    html.pane-memo #memoWrap{width:auto}
     .card{max-height:calc(100dvh - 165px - var(--tick))}
     #tick{font-size:calc(var(--fs) * .95)}
     th,td{padding:4px 10px}
@@ -224,6 +241,8 @@
     if (sz) s.setProperty('--fs', sz + 'px');
     var w = parseInt(localStorage.getItem('nvsMemoW'), 10);
     if (w) s.setProperty('--memow', w + 'px');
+    var p = localStorage.getItem('nvsPane');
+    if (p === 'comp' || p === 'memo') document.documentElement.classList.add('pane-' + p);
   } catch (e) {}
 })();
 </script>
@@ -288,7 +307,7 @@
 <nav id="tabs"></nav>
 <main>
   <div class="card" id="card"><div id="empty">Type a ticker above — data appears here the moment Excel answers.</div></div>
-  <div id="split" title="drag to resize"></div>
+  <div id="split" title="drag to resize"><span class="pbtn" id="minL">◀</span><span class="pbtn" id="minR">▶</span></div>
   <section id="memoWrap"></section>
 </main>
 <div id="tick" class="off" title="hover to pause"><div id="tickTrack"></div></div>
@@ -792,6 +811,7 @@ document.addEventListener('keydown', e => {
     document.documentElement.style.setProperty('--memow', w + 'px');
   }
   sp.addEventListener('mousedown', e => {
+    if (pane !== 'both') return;
     drag = true; sp.classList.add('on'); document.body.classList.add('dragging'); e.preventDefault();
   });
   window.addEventListener('mousemove', e => { if (drag) { move(e.clientX); e.preventDefault(); } });
@@ -802,7 +822,7 @@ document.addEventListener('keydown', e => {
     try { localStorage.setItem('nvsMemoW', String(w)); } catch (e) {}
     pushUi();
   });
-  sp.addEventListener('touchstart', e => { drag = true; sp.classList.add('on'); e.preventDefault(); }, {passive:false});
+  sp.addEventListener('touchstart', e => { if (pane !== 'both') return; drag = true; sp.classList.add('on'); e.preventDefault(); }, {passive:false});
   window.addEventListener('touchmove', e => { if (drag && e.touches[0]) { move(e.touches[0].clientX); e.preventDefault(); } }, {passive:false});
   window.addEventListener('touchend', () => {
     if (!drag) return;
@@ -811,6 +831,39 @@ document.addEventListener('keydown', e => {
     try { localStorage.setItem('nvsMemoW', String(w)); } catch (e) {}
     pushUi();
   });
+})();
+
+// ---- pane minimize / maximize: the arrows on the divider --------------------
+// ◀ collapses the company pane (memo goes full width); ▶ collapses the memo.
+// The same arrow, pointing back the way the divider went, restores the split.
+var pane = 'both';
+function applyPane(p, save){
+  pane = (p === 'comp' || p === 'memo') ? p : 'both';
+  const de = document.documentElement;
+  de.classList.toggle('pane-comp', pane === 'comp');
+  de.classList.toggle('pane-memo', pane === 'memo');
+  const L = $('minL'), R = $('minR');
+  if (L) { L.style.display = pane === 'memo' ? 'none' : '';
+           L.title = pane === 'comp' ? 'restore memo' : 'minimize company pane'; }
+  if (R) { R.style.display = pane === 'comp' ? 'none' : '';
+           R.title = pane === 'memo' ? 'restore company pane' : 'minimize memo'; }
+  if (save) {
+    try { localStorage.setItem('nvsPane', pane); } catch (e) {}
+    pushUi();
+  }
+}
+(function(){
+  const L = $('minL'), R = $('minR');
+  if (!L || !R) return;
+  const eat = e => e.stopPropagation();            // don't start a divider drag
+  L.addEventListener('mousedown', eat); R.addEventListener('mousedown', eat);
+  L.addEventListener('touchstart', eat, {passive:true});
+  R.addEventListener('touchstart', eat, {passive:true});
+  L.onclick = () => applyPane(pane === 'comp' ? 'both' : 'memo', true);
+  R.onclick = () => applyPane(pane === 'memo' ? 'both' : 'comp', true);
+  let p0 = '';
+  try { p0 = localStorage.getItem('nvsPane') || ''; } catch (e) {}
+  applyPane(p0, false);
 })();
 
 // ---- UI state synced via Firebase (nvs/ui): font, size, bold, closed tabs, active tab ----
@@ -824,6 +877,7 @@ function pushUiNow(){
                bold: $('boldChk').checked ? 1 : 0,
                hidden: [...hidden], active: active || null,
                memow: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--memow')) || 300,
+               pane: pane,
                bg: $('bgSel').value,
                colw: colW.map(w => w || 0),
                at: firebase.database.ServerValue.TIMESTAMP };
@@ -842,6 +896,8 @@ function initUiSync(){
         document.documentElement.style.setProperty('--memow', st.memow + 'px');
         try { localStorage.setItem('nvsMemoW', String(st.memow)); } catch (e) {}
       }
+      applyPane(st.pane || 'both', false);
+      try { localStorage.setItem('nvsPane', pane); } catch (e) {}
       applyFont();
       if (st.bg) applyBg(st.bg, false);
       if (Array.isArray(st.colw)) {

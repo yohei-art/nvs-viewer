@@ -11,6 +11,17 @@ Files
   DEVLOG.md    this file
 
 
+2026-08-17  build-20260817-pane
+------------------------------------------------
+ADDED  Minimize / maximize for the two panes. The divider now carries two
+       arrows: ◀ collapses the company side (memo takes the full width),
+       ▶ collapses the memo (companies take the full width); the same
+       arrow, pointing back the way the divider went, restores the split.
+       The chosen mode is remembered locally and synced through nvs/ui so
+       every device opens the same way. Dragging the divider is disabled
+       while a pane is collapsed. Phones ignore the mode - the stacked
+       layout always shows both.
+
 2026-08-14  build-20260814-set / memo-20260814d
 ------------------------------------------------
 FIXED  A day's notes could be wiped. If you clicked into the memo within about a
